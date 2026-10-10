@@ -1,0 +1,25 @@
+name: helper
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: helper/go.mod
+      - name: Vet
+        run: cd helper && go vet ./...
+      - name: Test
+        run: cd helper && go test ./...
+      - name: Check generated code is current
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
+          go install github.com/bufbuild/buf/cmd/buf@latest
+          make lint generate
+          git diff --exit-code -- helper/pb
