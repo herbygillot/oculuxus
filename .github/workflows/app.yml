@@ -10,6 +10,11 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: helper/go.mod
+      - name: Build helper
+        run: make build
       - name: Build
         run: cd app && swift build
       - name: Test
