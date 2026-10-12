@@ -16,6 +16,13 @@ at the repository root (or point `OCULUXUS_HELPER` at a helper binary). Open a
 project with Open Folder… (⌘O), or pass a folder: `swift run Oculuxus ~/src/proj`.
 The last project is reopened on launch.
 
+⌘K (Go ▸ Jump to Symbol…) searches the helper's symbol index as you type:
+Return opens the match in the active Workspace, ⌘-Return or ⌘-click in a new
+one. The app watches the project folder with FSEvents and, when Go files or
+module files change, asks the helper to reload them and refreshes open
+Workspaces in place. Code from `_test.go` files is hidden unless the Tests
+toolbar toggle (or View ▸ Show Code from Tests, ⇧⌘T) is on.
+
 The protocol types (`OcxRequest`, `OcxPackageOutline`, ...) are generated from
 `proto/oculuxus/v1/oculuxus.proto` at build time by the swift-protobuf SwiftPM
 plugin; `Sources/Oculuxus/swift-protobuf-config.json` points it at the schema.
@@ -34,7 +41,8 @@ Workspace for a project into a PNG when `OCULUXUS_SNAPSHOT_DIR` is set.
 | Directory | What it is |
 | --- | --- |
 | `Helper/` | `HelperClient` (process, framing, request ids, progress, cancel, shutdown) and locating the helper and Go. |
-| `Model/` | `ProjectSession`: the open project, its package list, and shared, cancellable request caches. |
+| `Model/` | `ProjectSession`: the open project, its package list, shared, cancellable request caches, and live reload; `ProjectWatcher` (FSEvents). |
 | `Navigator/` | The Navigator window: project picker, project packages, dependencies by module, the standard library. |
 | `Workspace/` | Workspace windows: package content pane, source viewer (TextKit 2 `NSTextView`), history. |
+| `Search/` | The ⌘K panel and its model. |
 | `Settings/` | Font, color scheme, Go binary and recent projects, their popover, and open panels. |

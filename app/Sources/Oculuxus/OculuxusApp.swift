@@ -14,7 +14,8 @@ struct OculuxusApp: App {
         .defaultSize(width: 320, height: 700)
         .commands {
             ProjectCommands(state: state)
-            GoCommands()
+            GoCommands(state: state)
+            ViewCommands(settings: state.settings)
         }
 
         WindowGroup("Workspace", id: WindowID.workspace, for: UUID.self) { $id in
@@ -69,16 +70,34 @@ struct ProjectCommands: Commands {
 }
 
 struct GoCommands: Commands {
+    var state: AppState
     @FocusedValue(\.workspace) private var workspace
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandMenu("Go") {
+            Button("Jump to Symbol…") { state.showSymbolSearch(openWindow: openWindow) }
+                .keyboardShortcut("k", modifiers: .command)
+                .disabled(state.session?.status != .ready)
+            Divider()
             Button("Back") { workspace?.goBack() }
                 .keyboardShortcut("[", modifiers: .command)
                 .disabled(!(workspace?.canGoBack ?? false))
             Button("Forward") { workspace?.goForward() }
                 .keyboardShortcut("]", modifiers: .command)
                 .disabled(!(workspace?.canGoForward ?? false))
+        }
+    }
+}
+
+struct ViewCommands: Commands {
+    @Bindable var settings: AppSettings
+
+    var body: some Commands {
+        CommandGroup(after: .toolbar) {
+            Toggle("Show Code from Tests", isOn: $settings.showsTests)
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+            Divider()
         }
     }
 }

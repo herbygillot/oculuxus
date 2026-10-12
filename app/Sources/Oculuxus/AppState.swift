@@ -135,6 +135,8 @@ final class AppState {
     func openProject(_ rootDir: String, openWindow: OpenWindowAction?) async {
         if session?.rootDir == rootDir, session?.status == .ready { return }
         session?.close()
+        searchPanel?.close()
+        searchModel = nil
         let session = ProjectSession(rootDir: rootDir, goBinary: settings.goBinary)
         self.session = session
         settings.addRecentProject(rootDir)
@@ -161,6 +163,47 @@ final class AppState {
         if let first = session.listing.projectPackages.first {
             show(WorkspaceLocation(packageID: first.id), newWindow: false, openWindow: openWindow)
         }
+    }
+
+    // MARK: Symbol search
+
+    @ObservationIgnored private var searchPanel: SymbolSearchPanel?
+    @ObservationIgnored private(set) var searchModel: SymbolSearchModel?
+
+    /// Shows the ⌘K panel over the active Workspace. It keeps the last
+    /// query for the same project.
+    func showSymbolSearch(openWindow: OpenWindowAction?) {
+        guard let session, session.status == .ready else {
+            NSSound.beep()
+            return
+        }
+        let previousKey = NSApp.keyWindow
+        let model = searchModel?.session === session ? searchModel! : SymbolSearchModel(session: session, includeDependencies: settings.searchesDependencies)
+        searchModel = model
+        let panel = searchPanel ?? SymbolSearchPanel()
+        searchPanel = panel
+        let open: (OcxSymbolMatch, Bool) -> Void = { [weak self, weak panel] match, newWindow in
+            panel?.close()
+            self?.show(SymbolSearchModel.location(of: match), newWindow: newWindow, openWindow: openWindow)
+        }
+        panel.onCommandReturn = { [weak model] in
+            if let match = model?.selected { open(match, true) }
+        }
+        let view = SymbolSearchView(
+            model: model,
+            theme: settings.theme,
+            font: settings.font,
+            open: open,
+            close: { [weak panel] in
+                panel?.close()
+                previousKey?.makeKeyAndOrderFront(nil)
+            }
+        )
+        .onChange(of: model.includeDependencies) { [weak self] _, value in self?.settings.searchesDependencies = value }
+        panel.contentView = NSHostingView(rootView: view)
+        panel.position(over: activeWorkspace?.window ?? previousKey)
+        panel.makeKeyAndOrderFront(nil)
+        if !model.query.isEmpty { model.search(keepSelection: true) }
     }
 
     /// A folder passed on the command line (`swift run Oculuxus DIR`).

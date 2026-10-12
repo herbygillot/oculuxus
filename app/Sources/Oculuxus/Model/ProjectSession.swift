@@ -22,12 +22,36 @@ final class ProjectSession {
     private(set) var status: Status = .opening("Starting")
     private(set) var project: OcxProject?
     private(set) var listing = PackageListing()
+    /// Bumped for a package each time files change under it; views showing
+    /// the package load it again when its revision changes.
+    private(set) var revisions: [String: Int] = [:]
 
     @ObservationIgnored private var client: HelperClient?
     @ObservationIgnored private var connecting: Task<HelperClient, Error>?
-    @ObservationIgnored private let outlines = RequestCache<String, OcxPackageOutline>()
-    @ObservationIgnored private let declarationSources = RequestCache<WorkspaceLocation, OcxDeclarationSourceResponse>()
-    @ObservationIgnored private let fileSources = RequestCache<String, OcxFileSourceResponse>()
+    @ObservationIgnored private let outlines = RequestCache<PackageKey, OcxPackageOutline>()
+    @ObservationIgnored private let declarationSources = RequestCache<DeclarationKey, OcxDeclarationSourceResponse>()
+    @ObservationIgnored private let fileSources = RequestCache<FileKey, OcxFileSourceResponse>()
+    @ObservationIgnored private var watcher: ProjectWatcher?
+    /// Changed files waiting for the reload in progress to finish.
+    @ObservationIgnored private var reloadQueue: [String] = []
+    @ObservationIgnored private var reloading = false
+
+    struct PackageKey: Hashable {
+        var packageID: String
+        var tests: Bool
+    }
+
+    struct DeclarationKey: Hashable {
+        var packageID: String
+        var declarationID: String
+        var tests: Bool
+    }
+
+    struct FileKey: Hashable {
+        var packageID: String
+        var file: String
+        var tests: Bool
+    }
 
     init(rootDir: String, goBinary: String?) {
         self.rootDir = rootDir
@@ -51,6 +75,7 @@ final class ProjectSession {
             }
             listing = PackageListing(response)
             status = .ready
+            startWatching()
         } catch is CancellationError {
         } catch let error as HelperError where error.code == .goToolchain {
             status = .needsGoToolchain(error.localizedDescription)
@@ -98,11 +123,64 @@ final class ProjectSession {
         return client
     }
 
-    /// Stops the helper. The session can be opened again later.
+    /// Stops the helper and the folder watcher. The session can be opened
+    /// again later.
     func close() {
+        watcher?.stop()
+        watcher = nil
         let client = self.client
         self.client = nil
         Task.detached { client?.shutdown() }
+    }
+
+    // MARK: Live reload
+
+    private func startWatching() {
+        guard watcher == nil else { return }
+        let watcher = ProjectWatcher(root: rootDir) { [weak self] files in
+            Task { await self?.reload(files) }
+        }
+        if watcher.start() { self.watcher = watcher }
+    }
+
+    func revision(of packageID: String) -> Int {
+        revisions[packageID] ?? 0
+    }
+
+    /// Tells the helper which files changed, drops what is cached for the
+    /// packages it reports, relists packages when the list changed, and
+    /// bumps those packages' revisions so open Workspaces refresh. Batches
+    /// that arrive during a reload are sent together after it.
+    func reload(_ files: [String]) async {
+        reloadQueue.append(contentsOf: files)
+        guard !reloading else { return }
+        reloading = true
+        defer { reloading = false }
+        while !reloadQueue.isEmpty {
+            let batch = Array(Set(reloadQueue)).sorted()
+            reloadQueue = []
+            guard status == .ready, let client, client.isRunning else { return }
+            do {
+                let response = try await client.reload(changedFiles: batch)
+                var changed = Set(response.changedPackageIds)
+                if response.packageListChanged {
+                    listing = PackageListing(try await client.listPackages())
+                    // The helper dropped every type-checked package.
+                    changed.formUnion(outlines.keys.map(\.packageID))
+                    outlines.invalidate { _ in true }
+                    declarationSources.invalidate { _ in true }
+                    fileSources.invalidate { _ in true }
+                } else {
+                    outlines.invalidate { changed.contains($0.packageID) }
+                    declarationSources.invalidate { changed.contains($0.packageID) }
+                    fileSources.invalidate { changed.contains($0.packageID) }
+                }
+                for id in changed { revisions[id, default: 0] += 1 }
+            } catch {
+                // The helper stopped; the next request restarts it.
+                return
+            }
+        }
     }
 
     // MARK: Lookups
@@ -111,22 +189,42 @@ final class ProjectSession {
         listing.byID[id]
     }
 
-    func outline(_ packageID: String) async throws -> OcxPackageOutline {
-        try await outlines.value(for: packageID) { [self] in
-            try await connect().packageOutline(packageID)
+    /// Whether requests for the package include test files: when the user
+    /// shows tests, and always for an external test package ("pkg_test"),
+    /// which only exists with them.
+    func includesTests(_ packageID: String, showsTests: Bool) -> Bool {
+        showsTests || (package(packageID) == nil && packageID.hasSuffix("_test"))
+    }
+
+    /// The package's outline; with `tests`, including its _test.go files.
+    func outline(_ packageID: String, tests: Bool = false) async throws -> OcxPackageOutline {
+        try await outlines.value(for: PackageKey(packageID: packageID, tests: tests)) { [self] in
+            try await connect().packageOutline(packageID, includeTests: tests)
         }
     }
 
-    func declarationSource(_ location: WorkspaceLocation) async throws -> OcxDeclarationSourceResponse {
-        try await declarationSources.value(for: location) { [self] in
-            try await connect().declarationSource(packageID: location.packageID, declarationID: location.declarationID ?? "")
+    func declarationSource(_ location: WorkspaceLocation, tests: Bool = false) async throws -> OcxDeclarationSourceResponse {
+        let key = DeclarationKey(packageID: location.packageID, declarationID: location.declarationID ?? "", tests: tests)
+        return try await declarationSources.value(for: key) { [self] in
+            try await connect().declarationSource(packageID: key.packageID, declarationID: key.declarationID, includeTests: tests)
         }
     }
 
-    func fileSource(packageID: String, file: String) async throws -> OcxFileSourceResponse {
-        try await fileSources.value(for: file) { [self] in
-            try await connect().fileSource(packageID: packageID, file: file)
+    func fileSource(packageID: String, file: String, tests: Bool = false) async throws -> OcxFileSourceResponse {
+        try await fileSources.value(for: FileKey(packageID: packageID, file: file, tests: tests)) { [self] in
+            try await connect().fileSource(packageID: packageID, file: file, includeTests: tests)
         }
+    }
+
+    /// Searches the symbol index. Results cover the project once it is
+    /// indexed; `complete` in the response says whether dependencies are
+    /// fully indexed yet.
+    func search(_ query: String, includeDependencies: Bool, limit: Int = 80, progress: HelperClient.ProgressHandler? = nil) async throws -> OcxSearchResponse {
+        var request = OcxSearchRequest()
+        request.query = query
+        request.includeDependencies = includeDependencies
+        request.limit = UInt32(limit)
+        return try await connect().search(request, progress: progress)
     }
 }
 
@@ -178,6 +276,8 @@ final class RequestCache<Key: Hashable, Value: Sendable> {
     @MainActor private final class Entry {
         var task: Task<Value, Error>?
         var waiters = 0
+        /// Invalidated while in flight: the value must not be cached.
+        var stale = false
     }
 
     @MainActor private final class Waiter {
@@ -188,6 +288,19 @@ final class RequestCache<Key: Hashable, Value: Sendable> {
     private var inflight: [Key: Entry] = [:]
 
     func cached(_ key: Key) -> Value? { values[key] }
+
+    var keys: Set<Key> { Set(values.keys).union(inflight.keys) }
+
+    /// Forgets the values for matching keys. Requests in flight for them
+    /// still answer their waiters but are not cached; the next caller
+    /// starts a new request.
+    func invalidate(where matches: (Key) -> Bool) {
+        for key in values.keys where matches(key) { values[key] = nil }
+        for (key, entry) in inflight where matches(key) {
+            entry.stale = true
+            inflight[key] = nil
+        }
+    }
 
     func value(for key: Key, load: @escaping @MainActor () async throws -> Value) async throws -> Value {
         if let value = values[key] { return value }
@@ -200,7 +313,7 @@ final class RequestCache<Key: Hashable, Value: Sendable> {
             entry.task = Task { @MainActor [weak self] in
                 defer { if self?.inflight[key] === entry { self?.inflight[key] = nil } }
                 let value = try await load()
-                self?.values[key] = value
+                if !entry.stale { self?.values[key] = value }
                 return value
             }
         }

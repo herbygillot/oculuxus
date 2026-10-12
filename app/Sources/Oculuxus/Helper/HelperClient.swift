@@ -289,26 +289,41 @@ extension HelperClient {
         return r
     }
 
-    func packageOutline(_ packageID: String, progress: ProgressHandler? = nil) async throws -> OcxPackageOutline {
+    func packageOutline(_ packageID: String, includeTests: Bool = false, progress: ProgressHandler? = nil) async throws -> OcxPackageOutline {
         var req = OcxPackageOutlineRequest()
         req.packageID = packageID
+        req.includeTests = includeTests
         guard case let .packageOutline(r) = try await request(.packageOutline(req), progress: progress) else { throw HelperError.unexpectedResponse }
         return r.outline
     }
 
-    func declarationSource(packageID: String, declarationID: String) async throws -> OcxDeclarationSourceResponse {
+    func declarationSource(packageID: String, declarationID: String, includeTests: Bool = false) async throws -> OcxDeclarationSourceResponse {
         var req = OcxDeclarationSourceRequest()
         req.packageID = packageID
         req.declarationID = declarationID
+        req.includeTests = includeTests
         guard case let .declarationSource(r) = try await request(.declarationSource(req)) else { throw HelperError.unexpectedResponse }
         return r
     }
 
-    func fileSource(packageID: String, file: String) async throws -> OcxFileSourceResponse {
+    func fileSource(packageID: String, file: String, includeTests: Bool = false) async throws -> OcxFileSourceResponse {
         var req = OcxFileSourceRequest()
         req.packageID = packageID
         req.file = file
+        req.includeTests = includeTests
         guard case let .fileSource(r) = try await request(.fileSource(req)) else { throw HelperError.unexpectedResponse }
+        return r
+    }
+
+    func reload(changedFiles: [String]) async throws -> OcxReloadResponse {
+        var req = OcxReloadRequest()
+        req.changedFiles = changedFiles
+        guard case let .reload(r) = try await request(.reload(req)) else { throw HelperError.unexpectedResponse }
+        return r
+    }
+
+    func search(_ req: OcxSearchRequest, progress: ProgressHandler? = nil) async throws -> OcxSearchResponse {
+        guard case let .search(r) = try await request(.search(req), progress: progress) else { throw HelperError.unexpectedResponse }
         return r
     }
 }
