@@ -22,7 +22,7 @@ func (tp *typedPackage) buildOutline() *pb.PackageOutline {
 		Name:      tp.pkg.Name,
 	}
 	for _, f := range tp.pkg.CompiledGoFiles {
-		out.Files = append(out.Files, &pb.File{Path: f, Name: fileName(f)})
+		out.Files = append(out.Files, &pb.File{Path: f, Name: fileName(f), Test: isTestFile(f)})
 	}
 	sort.Slice(out.Files, func(i, j int) bool { return out.Files[i].Name < out.Files[j].Name })
 	out.Doc = tp.packageDoc()
@@ -32,7 +32,12 @@ func (tp *typedPackage) buildOutline() *pb.PackageOutline {
 	for _, e := range tp.pkg.Errors {
 		out.Errors = append(out.Errors, e.Error())
 	}
+	out.ExternalTestPackageId = tp.xtest
 	return out
+}
+
+func isTestFile(path string) bool {
+	return strings.HasSuffix(path, "_test.go")
 }
 
 // packageDoc returns the package comment, taking the one from doc.go when
@@ -62,6 +67,7 @@ func (tp *typedPackage) declProto(n *declNode) *pb.Declaration {
 		Exported:  exported(n.name),
 		Signature: tp.signature(n),
 		Location:  tp.location(n.node.Pos()),
+		Test:      isTestFile(n.path),
 	}
 	if n.doc != nil {
 		d.Doc = strings.TrimSpace(n.doc.Text())
@@ -85,6 +91,18 @@ func (tp *typedPackage) location(pos token.Pos) *pb.Location {
 // identifiers in the printed text are matched in order to the identifiers
 // in the syntax so that each keeps its type information.
 func (tp *typedPackage) signature(n *declNode) *pb.Text {
+	text, idents, ok := printSignature(tp.fset, n)
+	if !ok {
+		return &pb.Text{Text: n.name}
+	}
+	return tp.highlightPrinted(text, idents, n)
+}
+
+// printSignature renders a declaration as one line, and returns the
+// identifiers of the printed syntax in order so the caller can highlight
+// them. It needs only syntax; with type information (n.obj) an implicit
+// iota constant also shows its value.
+func printSignature(fset *token.FileSet, n *declNode) (string, []*ast.Ident, bool) {
 	var node ast.Node
 	var idents []*ast.Ident
 	switch v := n.node.(type) {
@@ -119,20 +137,20 @@ func (tp *typedPackage) signature(n *declNode) *pb.Text {
 				}
 			}
 		}
-		if tooLong(tp.fset, c.Values) {
+		if tooLong(fset, c.Values) {
 			c.Values = nil
 		}
 		node = &ast.GenDecl{Tok: n.decl.Tok, Specs: []ast.Spec{&c}}
 		idents = collectIdents(&c)
 	case *ast.Field:
-		return tp.fieldSignature(n, v)
+		return printField(fset, n, v)
 	default:
-		return &pb.Text{Text: n.name}
+		return "", nil, false
 	}
 	var buf bytes.Buffer
 	cfg := printer.Config{Mode: printer.UseSpaces, Tabwidth: 4}
-	if err := cfg.Fprint(&buf, tp.fset, node); err != nil {
-		return &pb.Text{Text: n.name}
+	if err := cfg.Fprint(&buf, fset, node); err != nil {
+		return "", nil, false
 	}
 	text := collapse(buf.String())
 	switch n.node.(type) {
@@ -152,16 +170,16 @@ func (tp *typedPackage) signature(n *declNode) *pb.Text {
 			}
 		}
 	}
-	return tp.highlightPrinted(text, idents, n)
+	return text, idents, true
 }
 
-// fieldSignature renders a struct field ("Name Type", or "Type" when
+// printField renders a struct field ("Name Type", or "Type" when
 // embedded) or an interface method ("Name(params) results").
-func (tp *typedPackage) fieldSignature(n *declNode, f *ast.Field) *pb.Text {
+func printField(fset *token.FileSet, n *declNode, f *ast.Field) (string, []*ast.Ident, bool) {
 	var buf bytes.Buffer
 	cfg := printer.Config{Mode: printer.UseSpaces, Tabwidth: 4}
-	if err := cfg.Fprint(&buf, tp.fset, f.Type); err != nil {
-		return &pb.Text{Text: n.name}
+	if err := cfg.Fprint(&buf, fset, f.Type); err != nil {
+		return "", nil, false
 	}
 	typeText := collapse(buf.String())
 	var text string
@@ -177,7 +195,7 @@ func (tp *typedPackage) fieldSignature(n *declNode, f *ast.Field) *pb.Text {
 		idents = append(idents, findIdent(f.Names, n.name))
 	}
 	idents = append(idents, collectIdents(f.Type)...)
-	return tp.highlightPrinted(text, idents, n)
+	return text, idents, true
 }
 
 func findIdent(ids []*ast.Ident, name string) *ast.Ident {

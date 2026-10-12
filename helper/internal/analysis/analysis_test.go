@@ -58,7 +58,7 @@ func TestOpenWorkspace(t *testing.T) {
 	if origins["example.com/alpha"] != pb.PackageOrigin_PROJECT || origins["example.com/beta"] != pb.PackageOrigin_PROJECT {
 		t.Errorf("workspace packages not marked PROJECT: %v", origins)
 	}
-	tp, err := p.Typed(context.Background(), "example.com/beta")
+	tp, err := p.Typed(context.Background(), "example.com/beta", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func findDecl(decls []*pb.Declaration, id string) *pb.Declaration {
 
 func TestOutline(t *testing.T) {
 	p := openTestProject(t, "simple")
-	tp, err := p.Typed(context.Background(), "example.com/simple/shapes")
+	tp, err := p.Typed(context.Background(), "example.com/simple/shapes", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestOutline(t *testing.T) {
 
 func TestDeclarationSource(t *testing.T) {
 	p := openTestProject(t, "simple")
-	tp, err := p.Typed(context.Background(), "example.com/simple/shapes")
+	tp, err := p.Typed(context.Background(), "example.com/simple/shapes", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestDeclarationSource(t *testing.T) {
 
 func TestFileSource(t *testing.T) {
 	p := openTestProject(t, "simple")
-	tp, err := p.Typed(context.Background(), "example.com/simple/shapes")
+	tp, err := p.Typed(context.Background(), "example.com/simple/shapes", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestReload(t *testing.T) {
 	if _, err := p.ListPackages(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.Typed(ctx, "example.com/simple/shapes"); err != nil {
+	if _, err := p.Typed(ctx, "example.com/simple/shapes", false); err != nil {
 		t.Fatal(err)
 	}
 	file, _ := filepath.Abs(filepath.Join("testdata", "simple", "shapes", "extra.go"))

@@ -42,6 +42,7 @@ message Request {
     DeclarationSourceRequest declaration_source = 14;
     FileSourceRequest file_source = 15;
     ReloadRequest reload = 16;
+    SearchRequest search = 17;
   }
 }
 
@@ -60,6 +61,7 @@ message Response {
     DeclarationSourceResponse declaration_source = 14;
     FileSourceResponse file_source = 15;
     ReloadResponse reload = 16;
+    SearchResponse search = 17;
   }
 }
 
@@ -199,6 +201,10 @@ message Package {
 // closed or the package is reloaded.
 message PackageOutlineRequest {
   string package_id = 1;
+  // Also load the package's _test.go files. Declarations from them are
+  // marked `test`. The external test package ("pkg_test") is its own
+  // package; see PackageOutline.external_test_package_id.
+  bool include_tests = 2;
 }
 
 message PackageOutlineResponse {
@@ -217,12 +223,18 @@ message PackageOutline {
   repeated Declaration declarations = 5;
   // Type-check and parse errors, if any. The outline is still returned.
   repeated string errors = 6;
+  // With include_tests, the id of the package's external test package
+  // (package foo_test in the same directory), if it has one. That id works
+  // in PackageOutline and source requests with include_tests set.
+  string external_test_package_id = 7;
 }
 
 message File {
   // Absolute path.
   string path = 1;
   string name = 2;
+  // A _test.go file.
+  bool test = 3;
 }
 
 enum SymbolKind {
@@ -236,6 +248,8 @@ enum SymbolKind {
   // A named type that is neither a struct nor an interface.
   TYPE = 7;
   FIELD = 8;
+  // A package; only in search results.
+  PACKAGE = 9;
 }
 
 message Declaration {
@@ -256,6 +270,8 @@ message Declaration {
   repeated Declaration members = 8;
   // For FIELD: the field is an embedded type.
   bool embedded = 9;
+  // Declared in a _test.go file.
+  bool test = 10;
 }
 
 message Location {
@@ -272,6 +288,8 @@ message Location {
 message DeclarationSourceRequest {
   string package_id = 1;
   string declaration_id = 2;
+  // As for PackageOutlineRequest.
+  bool include_tests = 3;
 }
 
 message DeclarationSourceResponse {
@@ -286,6 +304,8 @@ message FileSourceRequest {
   string package_id = 1;
   // Absolute path, as listed in PackageOutline.files.
   string file = 2;
+  // As for PackageOutlineRequest.
+  bool include_tests = 3;
 }
 
 message FileSourceResponse {
@@ -367,8 +387,9 @@ message SymbolRef {
 // ---------------------------------------------------------------------------
 
 // Tells the helper which files changed on disk. The helper drops what it
-// loaded for the affected packages and, when go.mod, go.work or the set
-// of files changed, reloads the package list.
+// loaded for the affected packages, re-indexes them in the background,
+// and, when go.mod, go.work or the set of files changed, reloads the
+// package list (and the index with it) on the next ListPackages.
 message ReloadRequest {
   repeated string changed_files = 1;
 }
@@ -378,4 +399,78 @@ message ReloadResponse {
   repeated string changed_package_ids = 1;
   // True when the app should request the package list again.
   bool package_list_changed = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Symbol index and search
+// ---------------------------------------------------------------------------
+
+// Searches the symbol index: every declaration, method, field and
+// interface method, by name. The index is built in the background after
+// the first ListPackages, the project's own packages first, then
+// dependencies and the standard library. It is built from syntax alone
+// (nothing is type-checked) and cached on disk between runs.
+//
+// A search waits, sending Progress, until the project's packages are
+// indexed. Dependencies are searched as far as they are indexed unless
+// `wait` is set; `complete` says whether the results cover everything.
+message SearchRequest {
+  string query = 1;
+  // At most this many matches; 0 means 50.
+  uint32 limit = 2;
+  // Also search dependencies and the standard library.
+  bool include_dependencies = 3;
+  // Wait until every package in scope is indexed.
+  bool wait = 4;
+}
+
+message SearchResponse {
+  // Best match first.
+  repeated SymbolMatch matches = 1;
+  // False while packages in scope are still being indexed.
+  bool complete = 2;
+  // Packages in scope that are indexed, and all packages in scope.
+  uint32 indexed_packages = 3;
+  uint32 total_packages = 4;
+}
+
+message SymbolMatch {
+  string package_id = 1;
+  string package_name = 2;
+  // "Name", or "Type.Member", as in Declaration.id.
+  string declaration_id = 3;
+  SymbolKind kind = 4;
+  // The declaration on one line, without highlighting.
+  string signature = 5;
+  Location location = 6;
+  PackageOrigin origin = 7;
+  // The parts of declaration_id that matched the query.
+  repeated Range matched = 8;
+}
+
+// The on-disk index cache, one file per project. Not sent over the wire.
+message SymbolIndex {
+  // Bumped when the indexing rules change; older caches are ignored.
+  uint32 format = 1;
+  // The Go version and build flags the index was built with.
+  string build = 2;
+  repeated IndexedPackage packages = 3;
+}
+
+message IndexedPackage {
+  string package_id = 1;
+  // A hash of the package's files' names, sizes and modification times.
+  bytes fingerprint = 2;
+  repeated string files = 3;
+  repeated IndexedSymbol symbols = 4;
+}
+
+message IndexedSymbol {
+  string declaration_id = 1;
+  SymbolKind kind = 2;
+  string signature = 3;
+  // Index into IndexedPackage.files.
+  uint32 file = 4;
+  uint32 line = 5;
+  uint32 column = 6;
 }
