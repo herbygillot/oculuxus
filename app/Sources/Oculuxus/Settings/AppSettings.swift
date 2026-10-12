@@ -75,6 +75,10 @@ final class AppSettings {
     var fontFamily: String { didSet { save() } }
     var fontSize: Double { didSet { save() } }
     var themeID: String { didSet { save() } }
+    /// The Go binary the user picked, or nil to find one automatically.
+    var goBinary: String? { didSet { save() } }
+    /// Recently opened project folders, most recent first.
+    private(set) var recentProjects: [String] { didSet { save() } }
 
     init() {
         let defaults = UserDefaults.standard
@@ -82,6 +86,16 @@ final class AppSettings {
         let size = defaults.double(forKey: "fontSize")
         fontSize = size > 0 ? size : 13
         themeID = defaults.string(forKey: "theme") ?? CodeTheme.light.id
+        goBinary = defaults.string(forKey: "goBinary")
+        recentProjects = defaults.stringArray(forKey: "recentProjects") ?? []
+    }
+
+    func addRecentProject(_ rootDir: String) {
+        recentProjects = Array(([rootDir] + recentProjects.filter { $0 != rootDir }).prefix(10))
+    }
+
+    func removeRecentProject(_ rootDir: String) {
+        recentProjects.removeAll { $0 == rootDir }
     }
 
     var theme: CodeTheme {
@@ -100,6 +114,8 @@ final class AppSettings {
         defaults.set(fontFamily, forKey: "fontFamily")
         defaults.set(fontSize, forKey: "fontSize")
         defaults.set(themeID, forKey: "theme")
+        defaults.set(goBinary, forKey: "goBinary")
+        defaults.set(recentProjects, forKey: "recentProjects")
     }
 }
 
@@ -118,6 +134,24 @@ struct SettingsPopover: View {
             }
             Picker("Colors", selection: $settings.themeID) {
                 ForEach(CodeTheme.all) { Text($0.name).tag($0.id) }
+            }
+            LabeledContent("Go") {
+                HStack {
+                    Text(settings.goBinary ?? "Automatic")
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .foregroundStyle(settings.goBinary == nil ? .secondary : .primary)
+                        .help(settings.goBinary ?? "The first go on your login shell's PATH or in a common location")
+                    Spacer()
+                    Button("Choose…") {
+                        if let path = GoBinaryPanel.choose(message: "Choose the Go binary Oculuxus uses. It applies the next time a project is opened.") {
+                            settings.goBinary = path
+                        }
+                    }
+                    if settings.goBinary != nil {
+                        Button("Reset") { settings.goBinary = nil }
+                    }
+                }
             }
         }
         .formStyle(.grouped)

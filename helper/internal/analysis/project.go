@@ -394,12 +394,13 @@ func (e *Error) Unwrap() error { return e.Err }
 
 // Proto converts any error to an Error message.
 func ErrorProto(err error) *pb.Error {
+	// Checked first: a cancelled load surfaces wrapped in a LOAD_FAILED Error.
+	if errors.Is(err, context.Canceled) {
+		return &pb.Error{Code: pb.Error_CANCELLED, Message: "cancelled"}
+	}
 	var e *Error
 	if errors.As(err, &e) {
 		return &pb.Error{Code: e.Code, Message: e.Err.Error()}
-	}
-	if errors.Is(err, context.Canceled) {
-		return &pb.Error{Code: pb.Error_CANCELLED, Message: "cancelled"}
 	}
 	return &pb.Error{Code: pb.Error_INTERNAL, Message: err.Error()}
 }

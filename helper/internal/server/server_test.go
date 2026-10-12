@@ -3,12 +3,14 @@ package server
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"path/filepath"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protodelim"
 
+	"github.com/herbygillot/oculuxus/helper/internal/analysis"
 	pb "github.com/herbygillot/oculuxus/helper/pb/oculuxus/v1"
 )
 
@@ -135,5 +137,13 @@ func TestCancelInFlight(t *testing.T) {
 	resp := h.Handle(ctx, &pb.Request{Id: 1, Body: &pb.Request_Info{Info: &pb.InfoRequest{}}}, func(string) {})
 	if e := resp.GetError(); e == nil || e.Code != pb.Error_CANCELLED {
 		t.Fatalf("expected CANCELLED, got %+v", resp)
+	}
+}
+
+func TestCancelledLoadIsCancelled(t *testing.T) {
+	// go/packages reports a cancelled load as a load failure.
+	err := &analysis.Error{Code: pb.Error_LOAD_FAILED, Err: fmt.Errorf("go list: %w", context.Canceled)}
+	if got := analysis.ErrorProto(err).Code; got != pb.Error_CANCELLED {
+		t.Fatalf("expected CANCELLED, got %v", got)
 	}
 }

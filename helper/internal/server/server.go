@@ -143,7 +143,8 @@ func (s *Server) logMessage(dir string, m proto.Message) {
 // may be called any number of times before Handle returns.
 func (h *Handler) Handle(ctx context.Context, req *pb.Request, progress func(string)) *pb.Response {
 	resp, err := h.handle(ctx, req, progress)
-	if err == nil && ctx.Err() != nil {
+	if ctx.Err() != nil {
+		// Cancelled: whatever failed, report CANCELLED, as the protocol promises.
 		err = ctx.Err()
 	}
 	if err != nil {

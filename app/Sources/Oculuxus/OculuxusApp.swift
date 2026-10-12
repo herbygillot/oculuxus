@@ -13,6 +13,7 @@ struct OculuxusApp: App {
         }
         .defaultSize(width: 320, height: 700)
         .commands {
+            ProjectCommands(state: state)
             GoCommands()
         }
 
@@ -37,6 +38,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate(ignoringOtherApps: true)
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Send every helper Shutdown and wait briefly for it to exit.
+        HelperClient.shutdownAll()
+    }
 }
 
 struct FocusedWorkspaceKey: FocusedValueKey {
@@ -47,6 +53,18 @@ extension FocusedValues {
     var workspace: WorkspaceModel? {
         get { self[FocusedWorkspaceKey.self] }
         set { self[FocusedWorkspaceKey.self] = newValue }
+    }
+}
+
+struct ProjectCommands: Commands {
+    var state: AppState
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("Open Folder…") { state.chooseProject(openWindow: openWindow) }
+                .keyboardShortcut("o", modifiers: .command)
+        }
     }
 }
 

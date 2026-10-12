@@ -1,0 +1,9 @@
+{
+    "invocations": [
+        {
+            "protoPath": "../../../proto",
+            "protoFiles": ["oculuxus/v1/oculuxus.proto"],
+            "visibility": "Internal"
+        }
+    ]
+}
