@@ -23,6 +23,11 @@ module files change, asks the helper to reload them and refreshes open
 Workspaces in place. Code from `_test.go` files is hidden unless the Tests
 toolbar toggle (or View ▸ Show Code from Tests, ⇧⌘T) is on.
 
+The Navigator lists packages as a tree, nested by import-path segments below
+their module, or as a flat list of full import paths. Switch with the control
+next to the project picker or View ▸ Packages as Tree / as List (⌃⌘1, ⌃⌘2);
+the choice is remembered.
+
 The protocol types (`OcxRequest`, `OcxPackageOutline`, ...) are generated from
 `proto/oculuxus/v1/oculuxus.proto` at build time by the swift-protobuf SwiftPM
 plugin; `Sources/Oculuxus/swift-protobuf-config.json` points it at the schema.
@@ -36,13 +41,14 @@ popover in a Workspace toolbar).
 
 `swift test` includes tests that drive the real helper; they are skipped when
 `bin/oculuxus-helper` is missing. `SnapshotTests` renders the Navigator and a
-Workspace for a project into a PNG when `OCULUXUS_SNAPSHOT_DIR` is set.
+Workspace for a project into a PNG when `OCULUXUS_SNAPSHOT_DIR` is set
+(`OCULUXUS_SNAPSHOT_LAYOUT=flat` renders the flat Navigator).
 
 | Directory | What it is |
 | --- | --- |
 | `Helper/` | `HelperClient` (process, framing, request ids, progress, cancel, shutdown) and locating the helper and Go. |
 | `Model/` | `ProjectSession`: the open project, its package list, shared, cancellable request caches, and live reload; `ProjectWatcher` (FSEvents). |
-| `Navigator/` | The Navigator window: project picker, project packages, dependencies by module, the standard library. |
+| `Navigator/` | The Navigator window: project picker, project packages, dependencies by module, the standard library, as a tree or a flat list (`PackageTree.swift`). |
 | `Workspace/` | Workspace windows: package content pane, source viewer (TextKit 2 `NSTextView`), history. |
 | `Search/` | The ⌘K panel and its model. |
 | `Settings/` | Font, color scheme, Go binary and recent projects, their popover, and open panels. |

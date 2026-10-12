@@ -11,7 +11,8 @@ import XCTest
 ///     swift test --filter SnapshotTests
 ///
 /// OCULUXUS_SNAPSHOT_TESTS=1 shows test code; OCULUXUS_SNAPSHOT_SEARCH=query
-/// also renders the ⌘K panel for the query.
+/// also renders the ⌘K panel for the query. OCULUXUS_SNAPSHOT_LAYOUT=flat
+/// (or tree) picks the Navigator layout.
 @MainActor
 final class SnapshotTests: XCTestCase {
     func testRenderProject() async throws {
@@ -21,6 +22,7 @@ final class SnapshotTests: XCTestCase {
 
         let state = AppState()
         state.settings.showsTests = env["OCULUXUS_SNAPSHOT_TESTS"] != nil
+        state.settings.navigatorLayout = env["OCULUXUS_SNAPSHOT_LAYOUT"].flatMap(NavigatorLayout.init(rawValue:)) ?? .tree
         await state.openProject(project, openWindow: nil)
         let session = try XCTUnwrap(state.session)
         XCTAssertEqual(session.status, .ready)

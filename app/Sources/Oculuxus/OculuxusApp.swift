@@ -97,6 +97,13 @@ struct ViewCommands: Commands {
         CommandGroup(after: .toolbar) {
             Toggle("Show Code from Tests", isOn: $settings.showsTests)
                 .keyboardShortcut("t", modifiers: [.command, .shift])
+            Picker("Show Packages", selection: $settings.navigatorLayout) {
+                Text("Packages as Tree").tag(NavigatorLayout.tree)
+                    .keyboardShortcut("1", modifiers: [.command, .control])
+                Text("Packages as List").tag(NavigatorLayout.flat)
+                    .keyboardShortcut("2", modifiers: [.command, .control])
+            }
+            .pickerStyle(.inline)
             Divider()
         }
     }

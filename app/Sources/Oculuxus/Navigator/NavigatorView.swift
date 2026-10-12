@@ -31,8 +31,11 @@ struct NavigatorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ProjectPicker()
-                .padding(8)
+            HStack(spacing: 6) {
+                ProjectPicker()
+                LayoutPicker(settings: state.settings)
+            }
+            .padding(8)
             Divider()
             if let session = state.session {
                 SessionView(session: session)
@@ -126,36 +129,55 @@ private struct ProjectPicker: View {
     }
 }
 
-/// Project packages, dependencies by module, and the standard library.
+/// Switches the package list between a tree and a flat list.
+private struct LayoutPicker: View {
+    @Bindable var settings: AppSettings
+
+    var body: some View {
+        Picker("Layout", selection: $settings.navigatorLayout) {
+            ForEach(NavigatorLayout.allCases) { layout in
+                Label(layout.title, systemImage: layout.systemImage)
+                    .help("Show packages as a \(layout == .tree ? "tree" : "flat list")")
+                    .tag(layout)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelStyle(.iconOnly)
+        .labelsHidden()
+        .fixedSize()
+    }
+}
+
+/// Project packages, dependencies by module, and the standard library, as
+/// a tree or a flat list.
 private struct PackageList: View {
     @Environment(AppState.self) private var state
     @Environment(\.openWindow) private var openWindow
     var listing: PackageListing
     @State private var stdlibExpanded = false
     @State private var collapsedModules: Set<String> = []
+    /// Tree folders whose expansion differs from the default: expanded in
+    /// the project, collapsed elsewhere.
+    @State private var toggledNodes: Set<String> = []
     @State private var selectedPackageID: String?
 
     var body: some View {
+        let layout = state.settings.navigatorLayout
+        let outline = NavigatorOutline(listing, layout: layout)
         List(selection: $selectedPackageID) {
             Section("Project") {
-                ForEach(listing.projectPackages) { pkg in
-                    PackageRow(package: pkg, label: relativePath(pkg))
-                }
+                PackageNodes(nodes: outline.project, expanded: nodeExpanded)
             }
             Section("Dependencies") {
-                ForEach(listing.dependencies) { group in
-                    DisclosureGroup(isExpanded: moduleExpanded(group.module)) {
-                        ForEach(group.packages) { pkg in
-                            PackageRow(package: pkg, label: relativePath(pkg))
-                        }
+                ForEach(outline.dependencies) { module in
+                    DisclosureGroup(isExpanded: moduleExpanded(module.group.module)) {
+                        PackageNodes(nodes: module.nodes, expanded: nodeExpanded)
                     } label: {
-                        ModuleLabel(module: group.module)
+                        ModuleLabel(module: module.group.module)
                     }
                 }
                 DisclosureGroup(isExpanded: $stdlibExpanded) {
-                    ForEach(listing.stdlibPackages) { pkg in
-                        PackageRow(package: pkg, label: pkg.importPath)
-                    }
+                    PackageNodes(nodes: outline.stdlib, expanded: nodeExpanded)
                 } label: {
                     Label("Standard Library", systemImage: "books.vertical")
                 }
@@ -183,10 +205,11 @@ private struct PackageList: View {
             guard let id else { return }
             selectedPackageID = id
             // Reveal packages that were opened by following a reference.
-            if let pkg = listing.byID[id] {
-                if pkg.origin == .stdlib { stdlibExpanded = true }
-                collapsedModules.remove(moduleKey(pkg.modulePath, pkg.moduleVersion))
-            }
+            reveal(id, in: outline)
+        }
+        .onChange(of: layout) { _, layout in
+            // Keep the selected package in view in the other layout.
+            if let id = selectedPackageID { reveal(id, in: NavigatorOutline(listing, layout: layout)) }
         }
     }
 
@@ -196,6 +219,16 @@ private struct PackageList: View {
 
     private func show(_ packageID: String, newWindow: Bool) {
         state.show(WorkspaceLocation(packageID: packageID), newWindow: newWindow, openWindow: openWindow)
+    }
+
+    /// Expands the groups and folders that contain the package.
+    private func reveal(_ packageID: String, in outline: NavigatorOutline) {
+        guard let pkg = listing.byID[packageID] else { return }
+        if pkg.origin == .stdlib { stdlibExpanded = true }
+        collapsedModules.remove(moduleKey(pkg.modulePath, pkg.moduleVersion))
+        for id in outline.ancestors(of: packageID) ?? [] {
+            nodeExpanded(id).wrappedValue = true
+        }
     }
 
     private func moduleKey(_ path: String, _ version: String) -> String { path + "@" + version }
@@ -210,12 +243,39 @@ private struct PackageList: View {
         )
     }
 
-    /// The import path below the module, or the module's last element for
-    /// its root package.
-    private func relativePath(_ pkg: OcxPackage) -> String {
-        guard !pkg.modulePath.isEmpty, pkg.importPath.hasPrefix(pkg.modulePath) else { return pkg.importPath }
-        let rest = pkg.importPath.dropFirst(pkg.modulePath.count).drop { $0 == "/" }
-        return rest.isEmpty ? String(pkg.modulePath.split(separator: "/").last ?? "") : String(rest)
+    private func nodeExpanded(_ id: String) -> Binding<Bool> {
+        let byDefault = id.hasPrefix("project:")
+        return Binding(
+            get: { toggledNodes.contains(id) != byDefault },
+            set: { expanded in
+                if expanded == byDefault { toggledNodes.remove(id) } else { toggledNodes.insert(id) }
+            }
+        )
+    }
+}
+
+/// Package rows, with folders and packages that contain others as
+/// disclosure groups.
+private struct PackageNodes: View {
+    var nodes: [PackageNode]
+    var expanded: (String) -> Binding<Bool>
+
+    var body: some View {
+        ForEach(nodes) { node in
+            if node.children.isEmpty {
+                if let pkg = node.package { PackageRow(package: pkg, label: node.name) }
+            } else {
+                DisclosureGroup(isExpanded: expanded(node.id)) {
+                    PackageNodes(nodes: node.children, expanded: expanded)
+                } label: {
+                    if let pkg = node.package {
+                        PackageRow(package: pkg, label: node.name)
+                    } else {
+                        Label(node.name, systemImage: "folder")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -225,6 +285,8 @@ private struct PackageRow: View {
 
     var body: some View {
         Label(label, systemImage: "shippingbox")
+            .lineLimit(1)
+            .truncationMode(.middle)
             .help(package.importPath)
             .tag(package.id)
     }

@@ -81,6 +81,8 @@ final class AppSettings {
     var showsTests: Bool { didSet { save() } }
     /// ⌘K searches dependencies and the standard library as well.
     var searchesDependencies: Bool { didSet { save() } }
+    /// The Navigator lists packages as a tree or a flat list.
+    var navigatorLayout: NavigatorLayout { didSet { save() } }
     /// Recently opened project folders, most recent first.
     private(set) var recentProjects: [String] { didSet { save() } }
 
@@ -94,6 +96,7 @@ final class AppSettings {
         recentProjects = defaults.stringArray(forKey: "recentProjects") ?? []
         showsTests = defaults.bool(forKey: "showsTests")
         searchesDependencies = defaults.object(forKey: "searchesDependencies") as? Bool ?? true
+        navigatorLayout = defaults.string(forKey: "navigatorLayout").flatMap(NavigatorLayout.init(rawValue:)) ?? .tree
     }
 
     func addRecentProject(_ rootDir: String) {
@@ -124,6 +127,7 @@ final class AppSettings {
         defaults.set(recentProjects, forKey: "recentProjects")
         defaults.set(showsTests, forKey: "showsTests")
         defaults.set(searchesDependencies, forKey: "searchesDependencies")
+        defaults.set(navigatorLayout.rawValue, forKey: "navigatorLayout")
     }
 }
 
