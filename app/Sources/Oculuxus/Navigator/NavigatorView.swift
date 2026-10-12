@@ -27,13 +27,14 @@ struct NavigatorView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var stdlibExpanded = false
     @State private var collapsedModules: Set<String> = []
+    @State private var selectedPackageID: String?
 
     var body: some View {
         VStack(spacing: 0) {
             projectPicker
                 .padding(8)
             Divider()
-            List(selection: selection) {
+            List(selection: $selectedPackageID) {
                 Section("Project") {
                     ForEach(projectPackages) { pkg in
                         PackageRow(package: pkg, label: relativePath(pkg))
@@ -59,7 +60,35 @@ struct NavigatorView: View {
                 }
             }
             .listStyle(.sidebar)
+            .contextMenu(forSelectionType: String.self) { _ in
+            } primaryAction: { ids in
+                // Double-click or Return: show the package, opening a
+                // Workspace if none is open.
+                guard let id = ids.first else { return }
+                show(id, newWindow: ClickModifiers.opensNewWorkspace)
+            }
+            .onChange(of: selectedPackageID) { _, id in
+                // A single click follows along in the open Workspace; with no
+                // Workspace open it only selects, and double-click opens one.
+                guard let id, id != activePackageID else { return }
+                if ClickModifiers.opensNewWorkspace {
+                    show(id, newWindow: true)
+                } else if state.activeWorkspace != nil {
+                    show(id, newWindow: false)
+                }
+            }
+            .onChange(of: activePackageID, initial: true) { _, id in
+                if let id { selectedPackageID = id }
+            }
         }
+    }
+
+    private var activePackageID: String? {
+        state.activeWorkspace?.location?.packageID
+    }
+
+    private func show(_ packageID: String, newWindow: Bool) {
+        state.show(WorkspaceLocation(packageID: packageID), newWindow: newWindow, openWindow: openWindow)
     }
 
     private var projectPicker: some View {
@@ -75,18 +104,6 @@ struct NavigatorView: View {
             Image(systemName: "folder")
         }
         .help(state.project.rootDir)
-    }
-
-    /// Mirrors the active Workspace's package; picking a row shows the
-    /// package there, or in a new Workspace on Command-click.
-    private var selection: Binding<String?> {
-        Binding(
-            get: { state.activeWorkspace?.location?.packageID },
-            set: { id in
-                guard let id else { return }
-                state.show(WorkspaceLocation(packageID: id), newWindow: ClickModifiers.opensNewWorkspace, openWindow: openWindow)
-            }
-        )
     }
 
     private func moduleExpanded(_ path: String) -> Binding<Bool> {

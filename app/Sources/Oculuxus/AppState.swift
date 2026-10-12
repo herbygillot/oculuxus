@@ -19,6 +19,9 @@ final class WorkspaceModel: Identifiable {
     private(set) var index = -1
     var isFullScreen = false
     weak var window: NSWindow?
+    /// Set once the window is closed. SwiftUI may still evaluate a closed
+    /// window's content, so a closed model must never be shown in again.
+    var isClosed = false
 
     init(id: UUID) {
         self.id = id
@@ -58,6 +61,9 @@ final class AppState {
     let settings = AppSettings()
 
     private(set) var workspaces: [UUID: WorkspaceModel] = [:]
+    /// Workspaces whose windows have closed. SwiftUI can still evaluate a
+    /// closed window's content, which must not bring its Workspace back.
+    @ObservationIgnored private var closedWorkspaceIDs: Set<UUID> = []
     /// The Workspace that was most recently key.
     private(set) var lastActiveWorkspaceID: UUID?
     /// Set while a Workspace is full screen: the Navigator is docked in it.
@@ -75,23 +81,35 @@ final class AppState {
     func workspace(_ id: UUID) -> WorkspaceModel {
         if let model = workspaces[id] { return model }
         let model = WorkspaceModel(id: id)
-        workspaces[id] = model
+        if closedWorkspaceIDs.contains(id) {
+            model.isClosed = true
+        } else {
+            workspaces[id] = model
+        }
         return model
     }
 
     func workspaceBecameActive(_ id: UUID) {
+        guard !closedWorkspaceIDs.contains(id) else { return }
         lastActiveWorkspaceID = id
     }
 
     func workspaceClosed(_ id: UUID) {
+        closedWorkspaceIDs.insert(id)
+        if let model = workspaces[id] {
+            model.isClosed = true
+            model.window = nil
+        }
         workspaces[id] = nil
         if lastActiveWorkspaceID == id {
-            lastActiveWorkspaceID = workspaces.keys.first
+            lastActiveWorkspaceID = workspaces.values.first { !$0.isClosed && $0.window != nil }?.id
         }
     }
 
+    /// The last active Workspace, or nil when no Workspace window is open.
     var activeWorkspace: WorkspaceModel? {
-        lastActiveWorkspaceID.flatMap { workspaces[$0] }
+        guard let id = lastActiveWorkspaceID, let model = workspaces[id], !model.isClosed else { return nil }
+        return model
     }
 
     /// Shows `location` in the last active Workspace, or in a new one when

@@ -52,4 +52,19 @@ final class WorkspaceHistoryTests: XCTestCase {
         XCTAssertFalse(ws.canGoForward)
         XCTAssertEqual(ws.history.map(\.packageID), ["a", "c"])
     }
+
+    func testClosedWorkspaceStaysClosed() {
+        let state = AppState()
+        let id = UUID()
+        _ = state.workspace(id)
+        state.workspaceBecameActive(id)
+        XCTAssertNotNil(state.activeWorkspace)
+
+        state.workspaceClosed(id)
+        // SwiftUI re-evaluating the closed window must not revive it.
+        XCTAssertTrue(state.workspace(id).isClosed)
+        state.workspaceBecameActive(id)
+        XCTAssertNil(state.activeWorkspace)
+        XCTAssertTrue(state.workspaces.isEmpty)
+    }
 }

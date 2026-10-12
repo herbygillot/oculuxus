@@ -24,6 +24,16 @@ struct WorkspaceWindow: View {
         .background(WindowAccessor { window in
             workspace.window = window
             state.workspaceBecameActive(workspace.id)
+            // Observed on the window itself: SwiftUI can tear this view down
+            // before willClose is posted, and onReceive would miss it.
+            var observer: NSObjectProtocol?
+            observer = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { _ in
+                MainActor.assumeIsolated {
+                    if workspace.isFullScreen { setDocked(false) }
+                    state.workspaceClosed(workspace.id)
+                }
+                if let observer { NotificationCenter.default.removeObserver(observer) }
+            }
             let cascade = max(state.workspaces.count - 1, 0)
             if let frame = WindowLayout.workspaceFrame(on: window.screen, cascade: cascade) {
                 window.setFrame(frame, display: true)
@@ -31,12 +41,6 @@ struct WorkspaceWindow: View {
         })
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
             if isOwnWindow(note) { state.workspaceBecameActive(workspace.id) }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
-            if isOwnWindow(note) {
-                if workspace.isFullScreen { setDocked(false) }
-                state.workspaceClosed(workspace.id)
-            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willEnterFullScreenNotification)) { note in
             if isOwnWindow(note) { setDocked(true) }
