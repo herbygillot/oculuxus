@@ -1,0 +1,381 @@
+// Oculuxus helper protocol.
+//
+// The macOS app launches the Go helper as a child process and talks to it
+// over the helper's stdin and stdout. Each direction is a stream of
+// protobuf messages, every one prefixed with its length as a varint, the
+// framing that both google.golang.org/protobuf (protodelim) and
+// apple/swift-protobuf (BinaryDelimited) implement.
+//
+// The app writes Request messages; the helper writes Response messages.
+// Every Request carries an id chosen by the app. The helper answers each
+// request with zero or more Progress responses followed by exactly one
+// final response: the matching result message, or an Error. Requests run
+// concurrently and may be answered out of order. A Cancel request stops
+// an in-flight request, which then finishes with an Error of code
+// CANCELLED.
+//
+// Positions and ranges are byte offsets into the UTF-8 text they
+// accompany. Lines and columns, where given, are 1-based like go/token.
+syntax = "proto3";
+
+package oculuxus.v1;
+
+option go_package = "github.com/herbygillot/oculuxus/helper/pb/oculuxus/v1;oculuxusv1";
+option swift_prefix = "Ocx";
+
+// ---------------------------------------------------------------------------
+// Envelope
+// ---------------------------------------------------------------------------
+
+message Request {
+  // Chosen by the app; unique among in-flight requests. Must be non-zero.
+  uint64 id = 1;
+
+  oneof body {
+    Cancel cancel = 2;
+    Shutdown shutdown = 3;
+    InfoRequest info = 4;
+    OpenProjectRequest open_project = 10;
+    CloseProjectRequest close_project = 11;
+    ListPackagesRequest list_packages = 12;
+    PackageOutlineRequest package_outline = 13;
+    DeclarationSourceRequest declaration_source = 14;
+    FileSourceRequest file_source = 15;
+    ReloadRequest reload = 16;
+  }
+}
+
+message Response {
+  // The id of the Request this answers.
+  uint64 id = 1;
+
+  oneof body {
+    Error error = 2;
+    Progress progress = 3;
+    Empty empty = 4;
+    InfoResponse info = 5;
+    OpenProjectResponse open_project = 10;
+    ListPackagesResponse list_packages = 12;
+    PackageOutlineResponse package_outline = 13;
+    DeclarationSourceResponse declaration_source = 14;
+    FileSourceResponse file_source = 15;
+    ReloadResponse reload = 16;
+  }
+}
+
+message Empty {}
+
+// Cancels the request with the given id. Answered with Empty; the
+// cancelled request is answered separately with a CANCELLED Error.
+message Cancel {
+  uint64 request_id = 1;
+}
+
+// Asks the helper to exit after answering with Empty.
+message Shutdown {}
+
+message Error {
+  enum Code {
+    CODE_UNSPECIFIED = 0;
+    CANCELLED = 1;
+    INVALID_REQUEST = 2;
+    NOT_FOUND = 3;
+    NO_PROJECT = 4;
+    GO_TOOLCHAIN = 5;
+    LOAD_FAILED = 6;
+    INTERNAL = 7;
+  }
+  Code code = 1;
+  string message = 2;
+}
+
+// A non-final response describing what the helper is doing.
+message Progress {
+  string message = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Helper info
+// ---------------------------------------------------------------------------
+
+message InfoRequest {}
+
+message InfoResponse {
+  uint32 protocol_version = 1;
+  string helper_version = 2;
+  // Output of `go version` for the Go binary the helper will use.
+  string go_version = 3;
+  string goroot = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Projects
+// ---------------------------------------------------------------------------
+
+// Opens the folder the user picked. The helper looks for go.work, then
+// go.mod, in root_dir and lists the modules it will load. Any open project
+// is closed first.
+message OpenProjectRequest {
+  string root_dir = 1;
+  // Optional path to a Go binary chosen by the user. When empty the helper
+  // uses the `go` on its PATH.
+  string go_binary = 2;
+  // Optional build tags, as for `go build -tags`.
+  repeated string build_tags = 3;
+}
+
+message OpenProjectResponse {
+  Project project = 1;
+}
+
+message Project {
+  string root_dir = 1;
+  // Path of the go.work or go.mod file that defines the project.
+  string config_file = 2;
+  bool workspace = 3;
+  // The project's own modules (the main module, or every `use` of go.work).
+  repeated Module modules = 4;
+  string go_version = 5;
+}
+
+message Module {
+  string path = 1;
+  // Empty for the project's own modules.
+  string version = 2;
+  string dir = 3;
+  // True for the project's own modules.
+  bool main = 4;
+}
+
+message CloseProjectRequest {}
+
+// ---------------------------------------------------------------------------
+// Packages
+// ---------------------------------------------------------------------------
+
+// Lists every package in the project's build graph: the project's own
+// packages plus their transitive dependencies. Only metadata is loaded;
+// nothing is type-checked.
+message ListPackagesRequest {}
+
+message ListPackagesResponse {
+  repeated Package packages = 1;
+  // Every module that contributes a package, including the project's own.
+  repeated Module modules = 2;
+}
+
+enum PackageOrigin {
+  PACKAGE_ORIGIN_UNSPECIFIED = 0;
+  // Belongs to one of the project's own modules.
+  PROJECT = 1;
+  // Comes from a dependency module.
+  DEPENDENCY = 2;
+  // Part of the Go standard library.
+  STDLIB = 3;
+}
+
+message Package {
+  // Identifies the package in later requests. Equal to the import path.
+  string id = 1;
+  string import_path = 2;
+  string name = 3;
+  string dir = 4;
+  PackageOrigin origin = 5;
+  // Path of the module that contains the package; empty for the stdlib.
+  string module_path = 6;
+  string module_version = 7;
+  // Import paths of the packages this one imports directly.
+  repeated string imports = 8;
+  // Problems `go list` reported for this package.
+  repeated string errors = 9;
+}
+
+// ---------------------------------------------------------------------------
+// Outline
+// ---------------------------------------------------------------------------
+
+// Type-checks one package and returns its declarations with signatures
+// only. The package stays loaded in the helper until the project is
+// closed or the package is reloaded.
+message PackageOutlineRequest {
+  string package_id = 1;
+}
+
+message PackageOutlineResponse {
+  PackageOutline outline = 1;
+}
+
+message PackageOutline {
+  string package_id = 1;
+  string name = 2;
+  // The package doc comment, as plain text.
+  string doc = 3;
+  repeated File files = 4;
+  // Top-level declarations in source order. Methods are nested under
+  // their receiver type's declaration; struct fields and interface
+  // methods under their type's declaration.
+  repeated Declaration declarations = 5;
+  // Type-check and parse errors, if any. The outline is still returned.
+  repeated string errors = 6;
+}
+
+message File {
+  // Absolute path.
+  string path = 1;
+  string name = 2;
+}
+
+enum SymbolKind {
+  SYMBOL_KIND_UNSPECIFIED = 0;
+  CONST = 1;
+  VAR = 2;
+  FUNC = 3;
+  METHOD = 4;
+  STRUCT = 5;
+  INTERFACE = 6;
+  // A named type that is neither a struct nor an interface.
+  TYPE = 7;
+  FIELD = 8;
+}
+
+message Declaration {
+  // Identifies the declaration within its package: "Name" at the top
+  // level, "Type.Member" for methods and fields.
+  string id = 1;
+  SymbolKind kind = 2;
+  string name = 3;
+  bool exported = 4;
+  // One line of highlighted, clickable text such as
+  // "func (r *Reader) Read(p []byte) (n int, err error)".
+  Text signature = 5;
+  // The doc comment, as plain text.
+  string doc = 6;
+  // Where the declaration starts.
+  Location location = 7;
+  // Fields, interface methods, and methods, in source order.
+  repeated Declaration members = 8;
+  // For FIELD: the field is an embedded type.
+  bool embedded = 9;
+}
+
+message Location {
+  string file = 1;
+  uint32 line = 2;
+  uint32 column = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Source
+// ---------------------------------------------------------------------------
+
+// Returns the source of one declaration with highlight spans.
+message DeclarationSourceRequest {
+  string package_id = 1;
+  string declaration_id = 2;
+}
+
+message DeclarationSourceResponse {
+  // The declaration's source, including its doc comment.
+  Text source = 1;
+  // The file and line where `source` begins.
+  Location location = 2;
+}
+
+// Returns a whole file with highlight spans.
+message FileSourceRequest {
+  string package_id = 1;
+  // Absolute path, as listed in PackageOutline.files.
+  string file = 2;
+}
+
+message FileSourceResponse {
+  Text source = 1;
+  // Where each top-level declaration and member starts in `source`.
+  repeated DeclarationRange declarations = 2;
+}
+
+message DeclarationRange {
+  string declaration_id = 1;
+  Range range = 2;
+}
+
+// Highlighted text. Tokens never overlap and are in ascending order.
+message Text {
+  string text = 1;
+  repeated Token tokens = 2;
+}
+
+// Byte offsets into the accompanying text; `end` is exclusive.
+message Range {
+  uint32 start = 1;
+  uint32 end = 2;
+}
+
+// Modelled on LSP semantic token types.
+enum TokenType {
+  TOKEN_TYPE_UNSPECIFIED = 0;
+  KEYWORD = 1;
+  COMMENT = 2;
+  STRING = 3;
+  NUMBER = 4;
+  OPERATOR = 5;
+  // A package name.
+  NAMESPACE = 6;
+  // A named type that is neither a struct nor an interface.
+  TYPE_NAME = 7;
+  STRUCT_NAME = 8;
+  INTERFACE_NAME = 9;
+  TYPE_PARAMETER = 10;
+  FUNCTION = 11;
+  METHOD_NAME = 12;
+  VARIABLE = 13;
+  PARAMETER = 14;
+  PROPERTY = 15;
+  CONSTANT = 16;
+  LABEL = 17;
+  // A predeclared identifier such as len, int, nil, true.
+  BUILTIN = 18;
+}
+
+enum TokenModifier {
+  TOKEN_MODIFIER_NONE = 0;
+  // The token is where the symbol is declared.
+  DEFINITION = 1;
+  // The symbol is exported.
+  EXPORTED = 2;
+  // The token is in a doc comment.
+  DOCUMENTATION = 4;
+}
+
+message Token {
+  Range range = 1;
+  TokenType type = 2;
+  // Bitwise OR of TokenModifier values.
+  uint32 modifiers = 3;
+  // Set when the token refers to a declaration the app can navigate to.
+  SymbolRef target = 4;
+}
+
+message SymbolRef {
+  string package_id = 1;
+  // Empty when the reference is to the package itself.
+  string declaration_id = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Live reload
+// ---------------------------------------------------------------------------
+
+// Tells the helper which files changed on disk. The helper drops what it
+// loaded for the affected packages and, when go.mod, go.work or the set
+// of files changed, reloads the package list.
+message ReloadRequest {
+  repeated string changed_files = 1;
+}
+
+message ReloadResponse {
+  // Packages whose outline or source may have changed.
+  repeated string changed_package_ids = 1;
+  // True when the app should request the package list again.
+  bool package_list_changed = 2;
+}
