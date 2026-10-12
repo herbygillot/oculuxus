@@ -18,3 +18,14 @@ build:
 
 test:
 	cd helper && go test ./...
+
+.PHONY: app app-test app-run
+
+app:
+	cd app && swift build
+
+app-test:
+	cd app && swift test
+
+app-run:
+	cd app && swift run Oculuxus
