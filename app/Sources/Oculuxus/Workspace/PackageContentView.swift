@@ -60,6 +60,8 @@ struct PackageContentView: View {
                 if let package {
                     Text(package.importPath)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
                         .textSelection(.enabled)
                 }
             }
@@ -131,6 +133,10 @@ struct DeclarationView: View {
                 }
                 .padding(.leading, CGFloat(depth + 1) * 16 + 12)
                 .padding(.trailing, 12)
+                .onChange(of: context.selectedID, initial: true) { _, id in
+                    // Show a field or interface member that was navigated to.
+                    if let id, collapsible.contains(where: { $0.id == id }) { membersExpanded = true }
+                }
             }
             ForEach(methods) { method in
                 DeclarationView(declaration: method, context: context, depth: depth + 1)

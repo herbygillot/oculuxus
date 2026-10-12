@@ -43,7 +43,7 @@ enum CodeText {
         for token in text.tokens {
             guard let range = nsRange(token.range, in: text.text) else { continue }
             result.addAttribute(.foregroundColor, value: theme.color(for: token.type), range: range)
-            if token.modifiers & OcxTokenModifier.definition.rawValue != 0 {
+            if token.modifiers & UInt32(OcxTokenModifier.definition.rawValue) != 0 {
                 result.addAttribute(.font, value: NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask), range: range)
             }
             if token.hasTarget, let url = url(for: token.target) {

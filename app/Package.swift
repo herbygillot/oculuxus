@@ -7,10 +7,19 @@ let package = Package(
     products: [
         .executable(name: "Oculuxus", targets: ["Oculuxus"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.38.1"),
+    ],
     targets: [
         .executableTarget(
             name: "Oculuxus",
-            path: "Sources/Oculuxus"
+            dependencies: [
+                .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+            ],
+            path: "Sources/Oculuxus",
+            plugins: [
+                .plugin(name: "SwiftProtobufPlugin", package: "swift-protobuf"),
+            ]
         ),
         .testTarget(
             name: "OculuxusTests",

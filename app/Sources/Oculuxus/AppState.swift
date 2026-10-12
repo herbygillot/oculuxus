@@ -18,6 +18,8 @@ final class WorkspaceModel: Identifiable {
     private(set) var history: [WorkspaceLocation] = []
     private(set) var index = -1
     var isFullScreen = false
+    /// The source viewer shows the selected declaration's whole file.
+    var showsWholeFile = false
     weak var window: NSWindow?
     /// Set once the window is closed. SwiftUI may still evaluate a closed
     /// window's content, so a closed model must never be shown in again.
@@ -51,14 +53,20 @@ final class WorkspaceModel: Identifiable {
 
     func goBack() { if canGoBack { index -= 1 } }
     func goForward() { if canGoForward { index += 1 } }
+
+    /// Forgets the history; used when another project is opened.
+    func reset() {
+        history = []
+        index = -1
+    }
 }
 
 @Observable
 @MainActor
 final class AppState {
-    let projects = SampleData.projects
-    var projectID: String
     let settings = AppSettings()
+    /// The open project, if any.
+    private(set) var session: ProjectSession?
 
     private(set) var workspaces: [UUID: WorkspaceModel] = [:]
     /// Workspaces whose windows have closed. SwiftUI can still evaluate a
@@ -70,13 +78,7 @@ final class AppState {
     var dockedInWorkspaceID: UUID?
     weak var navigatorWindow: NSWindow?
 
-    init() {
-        projectID = SampleData.projects[0].id
-    }
-
-    var project: SampleProject {
-        projects.first { $0.id == projectID } ?? projects[0]
-    }
+    init() {}
 
     func workspace(_ id: UUID) -> WorkspaceModel {
         if let model = workspaces[id] { return model }
@@ -113,8 +115,9 @@ final class AppState {
     }
 
     /// Shows `location` in the last active Workspace, or in a new one when
-    /// `newWindow` is set or no Workspace is open.
-    func show(_ location: WorkspaceLocation, newWindow: Bool, openWindow: OpenWindowAction) {
+    /// `newWindow` is set or no Workspace is open. Without `openWindow`
+    /// (in tests) the new Workspace gets no window.
+    func show(_ location: WorkspaceLocation, newWindow: Bool, openWindow: OpenWindowAction?) {
         if !newWindow, let workspace = activeWorkspace {
             workspace.go(to: location)
             workspace.window?.makeKeyAndOrderFront(nil)
@@ -123,20 +126,55 @@ final class AppState {
         let workspace = workspace(UUID())
         workspace.go(to: location)
         lastActiveWorkspaceID = workspace.id
-        openWindow(id: WindowID.workspace, value: workspace.id)
+        openWindow?(id: WindowID.workspace, value: workspace.id)
     }
 
-    func switchProject(to id: String, openWindow: OpenWindowAction) {
-        guard id != projectID else { return }
-        projectID = id
-        if let first = project.listing.packages.first(where: { $0.origin == .project }) {
+    /// Opens the Go project in `rootDir`, replacing the open one. Once its
+    /// packages are listed, the active Workspace (or a new one) shows the
+    /// first project package.
+    func openProject(_ rootDir: String, openWindow: OpenWindowAction?) async {
+        if session?.rootDir == rootDir, session?.status == .ready { return }
+        session?.close()
+        let session = ProjectSession(rootDir: rootDir, goBinary: settings.goBinary)
+        self.session = session
+        settings.addRecentProject(rootDir)
+        for workspace in workspaces.values { workspace.reset() }
+        await session.open()
+        await showFirstPackage(of: session, openWindow: openWindow)
+    }
+
+    /// Opens the session again with a Go binary the user picked, and
+    /// remembers the choice.
+    func retry(_ session: ProjectSession, goBinary: String?, openWindow: OpenWindowAction?) async {
+        if let goBinary { settings.goBinary = goBinary }
+        await session.open(goBinary: goBinary)
+        await showFirstPackage(of: session, openWindow: openWindow)
+        if goBinary != nil, case .needsGoToolchain = session.status {
+            // The pick did not work; do not keep it.
+            settings.goBinary = nil
+        }
+    }
+
+    private func showFirstPackage(of session: ProjectSession, openWindow: OpenWindowAction?) async {
+        guard session === self.session, session.status == .ready else { return }
+        if activeWorkspace?.location != nil { return }
+        if let first = session.listing.projectPackages.first {
             show(WorkspaceLocation(packageID: first.id), newWindow: false, openWindow: openWindow)
         }
     }
 
-    /// The location to open when the app starts with no Workspace.
-    var initialLocation: WorkspaceLocation {
-        WorkspaceLocation(packageID: project.listing.packages.first { $0.origin == .project }?.id ?? "")
+    /// A folder passed on the command line (`swift run Oculuxus DIR`).
+    static var launchProject: String? {
+        var isDir: ObjCBool = false
+        return CommandLine.arguments.dropFirst()
+            .first { !$0.hasPrefix("-") && FileManager.default.fileExists(atPath: $0, isDirectory: &isDir) && isDir.boolValue }
+            .map { URL(fileURLWithPath: $0).standardizedFileURL.path }
+    }
+
+    /// Asks for a project folder and opens it.
+    func chooseProject(openWindow: OpenWindowAction) {
+        guard let dir = ProjectPanel.choose() else { return }
+        Task { await openProject(dir, openWindow: openWindow) }
     }
 }
 
