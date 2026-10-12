@@ -11,6 +11,7 @@ document for the design.
 | --- | --- |
 | `proto/` | The app ↔ helper protocol schema (`oculuxus/v1/oculuxus.proto`). One file generates the Go and the Swift types. |
 | `helper/` | The Go helper: a Go module that loads projects with `go/packages` and `go/types`. See [helper/README.md](helper/README.md). |
+| `app/` | The macOS app, a Swift package. It runs on sample data until it is connected to the helper. See [app/README.md](app/README.md). |
 
 ## Regenerating protocol code
 

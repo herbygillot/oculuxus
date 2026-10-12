@@ -1,0 +1,16 @@
+name: app
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cd app && swift build
+      - name: Test
+        run: cd app && swift test
