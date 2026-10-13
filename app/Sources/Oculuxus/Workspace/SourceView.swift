@@ -11,13 +11,16 @@ struct SourceView: NSViewRepresentable {
     var highlightedDeclarationID: String?
     var theme: CodeTheme
     var font: NSFont
+    /// The file and line the text starts at, for Open in Editor.
+    var firstLine: EditorTarget?
     /// Called when a reference is clicked; the flag is true for Command-click.
     var openReference: (WorkspaceLocation, Bool) -> Void
+    var openInEditor: (EditorTarget) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let textView = NSTextView(usingTextLayoutManager: true)
+        let textView = SourceTextView(usingTextLayoutManager: true)
         textView.isEditable = false
         textView.isSelectable = true
         textView.isRichText = false
@@ -46,6 +49,10 @@ struct SourceView: NSViewRepresentable {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         let coordinator = context.coordinator
         coordinator.openReference = openReference
+        if let textView = textView as? SourceTextView {
+            textView.firstLine = firstLine
+            textView.openInEditor = openInEditor
+        }
 
         let key = Coordinator.ContentKey(file: file, theme: theme.id, font: font)
         var keepScroll = false
@@ -102,5 +109,46 @@ struct SourceView: NSViewRepresentable {
             openReference?(location, ClickModifiers.opensNewWorkspace)
             return true
         }
+    }
+}
+
+/// The source text view, with Open in Editor at the clicked line in its
+/// context menu.
+final class SourceTextView: NSTextView {
+    var firstLine: EditorTarget?
+    var openInEditor: ((EditorTarget) -> Void)?
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        guard let firstLine else { return menu }
+        let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+        let target = Self.target(at: index, in: string, firstLine: firstLine)
+        let item = NSMenuItem(title: "Open in Editor at Line \(target.line)", action: #selector(openClickedLine(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = target
+        menu.insertItem(item, at: 0)
+        menu.insertItem(.separator(), at: 1)
+        return menu
+    }
+
+    @objc private func openClickedLine(_ sender: NSMenuItem) {
+        guard let target = sender.representedObject as? EditorTarget else { return }
+        openInEditor?(target)
+    }
+
+    /// The file line of the character at `index` (UTF-16) in `text`, which
+    /// starts at `firstLine`.
+    static func target(at index: Int, in text: String, firstLine: EditorTarget) -> EditorTarget {
+        let ns = text as NSString
+        let end = min(max(index, 0), ns.length)
+        var newlines = 0
+        var i = 0
+        while i < end {
+            let range = ns.range(of: "\n", range: NSRange(location: i, length: end - i))
+            if range.location == NSNotFound { break }
+            newlines += 1
+            i = range.location + 1
+        }
+        return EditorTarget(file: firstLine.file, line: firstLine.line + newlines)
     }
 }

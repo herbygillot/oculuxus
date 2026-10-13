@@ -10,6 +10,7 @@ struct PackageContentView: View {
     var font: NSFont
     var select: (String) -> Void
     var openReference: (WorkspaceLocation, Bool) -> Void
+    var openInEditor: (EditorTarget) -> Void
 
     /// Section order: vars, consts, interfaces, structs, funcs, other types.
     private static let sections: [(String, OcxSymbolKind)] = [
@@ -76,7 +77,7 @@ struct PackageContentView: View {
     }
 
     private var rowContext: DeclarationView.Context {
-        .init(selectedID: selectedID, theme: theme, font: font, select: select)
+        .init(selectedID: selectedID, theme: theme, font: font, select: select, openInEditor: openInEditor)
     }
 
     private var header: some View {
@@ -144,6 +145,7 @@ struct DeclarationView: View {
         var theme: CodeTheme
         var font: NSFont
         var select: (String) -> Void
+        var openInEditor: (EditorTarget) -> Void
     }
 
     var declaration: OcxDeclaration
@@ -219,6 +221,12 @@ private struct SignatureRow: View {
             .background(selected ? Color.accentColor.opacity(0.18) : .clear)
             .contentShape(Rectangle())
             .onTapGesture { context.select(declaration.id) }
+            .contextMenu {
+                Button("Open in Editor") {
+                    context.openInEditor(EditorTarget(file: declaration.location.file, line: max(Int(declaration.location.line), 1)))
+                }
+                .disabled(declaration.location.file.isEmpty)
+            }
             .help(declaration.doc)
             .id(declaration.id)
     }

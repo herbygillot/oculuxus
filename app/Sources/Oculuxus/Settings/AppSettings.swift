@@ -83,6 +83,12 @@ final class AppSettings {
     var searchesDependencies: Bool { didSet { save() } }
     /// The Navigator lists packages as a tree or a flat list.
     var navigatorLayout: NavigatorLayout { didSet { save() } }
+    /// The editor Open in Editor uses.
+    var editor: EditorChoice { didSet { save() } }
+    /// The command for EditorChoice.custom, with {file} and {line}.
+    var customEditorCommand: String { didSet { save() } }
+    /// What Automatic resolves to, once known: nil for the default app.
+    private(set) var automaticEditor: EditorChoice??
     /// Recently opened project folders, most recent first.
     private(set) var recentProjects: [String] { didSet { save() } }
 
@@ -97,6 +103,13 @@ final class AppSettings {
         showsTests = defaults.bool(forKey: "showsTests")
         searchesDependencies = defaults.object(forKey: "searchesDependencies") as? Bool ?? true
         navigatorLayout = defaults.string(forKey: "navigatorLayout").flatMap(NavigatorLayout.init(rawValue:)) ?? .tree
+        editor = defaults.string(forKey: "editor").flatMap(EditorChoice.init(rawValue:)) ?? .automatic
+        customEditorCommand = defaults.string(forKey: "customEditorCommand") ?? ""
+        Task { [weak self] in
+            // Off the main thread: it may read the login shell.
+            let editor = await Task.detached { EditorResolver.system().automaticEditor() }.value
+            self?.automaticEditor = .some(editor)
+        }
     }
 
     func addRecentProject(_ rootDir: String) {
@@ -128,11 +141,18 @@ final class AppSettings {
         defaults.set(showsTests, forKey: "showsTests")
         defaults.set(searchesDependencies, forKey: "searchesDependencies")
         defaults.set(navigatorLayout.rawValue, forKey: "navigatorLayout")
+        defaults.set(editor.rawValue, forKey: "editor")
+        defaults.set(customEditorCommand, forKey: "customEditorCommand")
     }
 }
 
 struct SettingsPopover: View {
     @Bindable var settings: AppSettings
+
+    private var automaticName: String {
+        guard let resolved = settings.automaticEditor else { return "Automatic" }
+        return "Automatic (\((resolved ?? .defaultApp).name))"
+    }
 
     var body: some View {
         Form {
@@ -164,6 +184,16 @@ struct SettingsPopover: View {
                         Button("Reset") { settings.goBinary = nil }
                     }
                 }
+            }
+            Picker("Editor", selection: $settings.editor) {
+                ForEach(EditorChoice.allCases) { choice in
+                    Text(choice == .automatic ? automaticName : choice.name).tag(choice)
+                }
+            }
+            .help("Where Open in Editor (⇧⌘E) opens a declaration or file")
+            if settings.editor == .custom {
+                TextField("Command", text: $settings.customEditorCommand, prompt: Text("mate -l {line} {file}"))
+                    .help("Run with /bin/sh. {file} is replaced by the quoted file path and {line} by the line number.")
             }
         }
         .formStyle(.grouped)

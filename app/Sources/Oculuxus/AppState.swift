@@ -20,6 +20,8 @@ final class WorkspaceModel: Identifiable {
     var isFullScreen = false
     /// The source viewer shows the selected declaration's whole file.
     var showsWholeFile = false
+    /// The file and line the source viewer shows, for Open in Editor.
+    var editorTarget: EditorTarget?
     weak var window: NSWindow?
     /// Set once the window is closed. SwiftUI may still evaluate a closed
     /// window's content, so a closed model must never be shown in again.

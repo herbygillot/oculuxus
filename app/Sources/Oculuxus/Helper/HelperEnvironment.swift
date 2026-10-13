@@ -72,38 +72,54 @@ enum GoToolchain {
         return URL(fileURLWithPath: dir)
     }
 
-    private static let shellPath = OSAllocatedUnfairLock<[String]?>(initialState: nil)
-
     /// PATH as the user's interactive login shell sets it. Computed once.
     static func loginShellPath() -> [String] {
-        if let path = shellPath.withLock({ $0 }) { return path }
-        let path = readLoginShellPath()
-        shellPath.withLock { $0 = path }
-        return path
+        (LoginShell.variables()["PATH"] ?? "").split(separator: ":").map(String.init)
+    }
+}
+
+/// Variables the user's interactive login shell sets. Apps launched from
+/// Finder do not inherit them.
+enum LoginShell {
+    static let names = ["PATH", "VISUAL", "EDITOR"]
+
+    private static let cache = OSAllocatedUnfairLock<[String: String]?>(initialState: nil)
+
+    /// PATH, VISUAL and EDITOR; empty ones are left out. Computed once.
+    static func variables() -> [String: String] {
+        if let vars = cache.withLock({ $0 }) { return vars }
+        let vars = read()
+        cache.withLock { $0 = vars }
+        return vars
     }
 
-    private static func readLoginShellPath() -> [String] {
+    private static func read() -> [String: String] {
         let shell = ProcessInfo.processInfo.environment["SHELL"].flatMap { $0.isEmpty ? nil : $0 } ?? "/bin/zsh"
-        let marker = "__OCULUXUS_PATH__"
+        let marker = "__OCULUXUS_ENV__"
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shell)
-        // Interactive so PATH set in .zshrc or .bashrc counts too; the
+        // Interactive so variables set in .zshrc or .bashrc count too; the
         // markers skip anything the rc files print.
-        process.arguments = ["-ilc", "printf '\(marker)%s\(marker)' \"$PATH\""]
+        let format = String(repeating: "\(marker)%s", count: names.count) + marker
+        process.arguments = ["-ilc", "printf '\(format)' " + names.map { "\"$\($0)\"" }.joined(separator: " ")]
         let out = Pipe()
         process.standardOutput = out
         process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
         let done = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in done.signal() }
-        do { try process.run() } catch { return [] }
+        do { try process.run() } catch { return [:] }
         if done.wait(timeout: .now() + 5) == .timedOut {
             process.terminate()
-            return []
+            return [:]
         }
         let text = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         let parts = text.components(separatedBy: marker)
-        guard parts.count >= 3 else { return [] }
-        return parts[1].split(separator: ":").map(String.init)
+        guard parts.count >= names.count + 2 else { return [:] }
+        var vars: [String: String] = [:]
+        for (name, value) in zip(names, parts[1...]) where !value.isEmpty {
+            vars[name] = value
+        }
+        return vars
     }
 }
