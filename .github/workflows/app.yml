@@ -19,3 +19,5 @@ jobs:
         run: cd app && swift build
       - name: Test
         run: cd app && swift test
+      - name: Bundle
+        run: ARCHS=arm64 make app-bundle

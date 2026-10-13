@@ -5,9 +5,20 @@ import SwiftUI
 /// the Navigator as a sidebar while the window is full screen.
 struct WorkspaceWindow: View {
     @Environment(AppState.self) private var state
-    var workspace: WorkspaceModel
+    /// The Workspace this window shows, fixed when the window first
+    /// appears. SwiftUI can later hand the window a value it saved in an
+    /// earlier run (the app bundle restores the launch window's value after
+    /// it is first shown); that id has no state, so it is ignored.
+    @State private var id: UUID
+
+    init(id: UUID) {
+        _id = State(initialValue: id)
+    }
+
+    private var workspace: WorkspaceModel { state.workspace(id) }
 
     var body: some View {
+        let workspace = workspace
         Group {
             if workspace.isFullScreen {
                 HSplitView {
@@ -103,6 +114,15 @@ struct WorkspaceView: View {
                 .help("Show the selected declaration or its whole file")
             }
             ToolbarItem(placement: .primaryAction) {
+                Button {
+                    if let target = workspace.editorTarget { EditorLauncher.open(target, settings: state.settings) }
+                } label: {
+                    Label("Open in Editor", systemImage: "arrow.up.forward.app")
+                }
+                .disabled(workspace.editorTarget == nil)
+                .help("Open the declaration or file in your editor (⇧⌘E)")
+            }
+            ToolbarItem(placement: .primaryAction) {
                 @Bindable var settings = state.settings
                 Toggle(isOn: $settings.showsTests) {
                     Label("Tests", systemImage: "testtube.2")
@@ -111,7 +131,7 @@ struct WorkspaceView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { showSettings.toggle() } label: { Image(systemName: "textformat.size") }
-                    .help("Font, Colors and Go")
+                    .help("Font, Colors, Go and Editor")
                     .popover(isPresented: $showSettings, arrowEdge: .bottom) {
                         SettingsPopover(settings: state.settings)
                     }
@@ -186,7 +206,8 @@ private struct PackagePanes: View {
                         theme: settings.theme,
                         font: settings.font,
                         select: { workspace.select($0) },
-                        openReference: open
+                        openReference: open,
+                        openInEditor: { EditorLauncher.open($0, settings: settings) }
                     )
                 }
             }
@@ -198,6 +219,7 @@ private struct PackagePanes: View {
                 outline: outline.value,
                 wholeFile: workspace.showsWholeFile,
                 tests: tests,
+                workspace: workspace,
                 open: open
             )
             .frame(minWidth: 280)
@@ -225,6 +247,7 @@ private struct SourcePane: View {
     var outline: OcxPackageOutline?
     var wholeFile: Bool
     var tests: Bool
+    var workspace: WorkspaceModel
     var open: (WorkspaceLocation, Bool) -> Void
 
     /// What is shown, with the file and line it starts at.
@@ -268,12 +291,16 @@ private struct SourcePane: View {
                     highlightedDeclarationID: request?.file != nil ? location.declarationID : nil,
                     theme: settings.theme,
                     font: settings.font,
-                    openReference: open
+                    firstLine: shown.map { EditorTarget(file: $0.file, line: max(Int($0.line), 1)) },
+                    openReference: open,
+                    openInEditor: { EditorLauncher.open($0, settings: settings) }
                 )
             }
         }
         .task(id: request) { await load() }
         .onChange(of: location) { pickedFile = nil }
+        .onChange(of: editorTarget, initial: true) { workspace.editorTarget = editorTarget }
+        .onDisappear { workspace.editorTarget = nil }
     }
 
     private var header: some View {
@@ -300,6 +327,17 @@ private struct SourcePane: View {
         .frame(height: 26)
         .background(Color(nsColor: state.settings.theme.background))
         .environment(\.colorScheme, state.settings.theme.isDark ? .dark : .light)
+    }
+
+    /// Where Open in Editor goes: the declaration's first line, or in a
+    /// whole file the selected declaration when it is in that file.
+    private var editorTarget: EditorTarget? {
+        guard let shown else { return nil }
+        if shown.line > 0 { return EditorTarget(file: shown.file, line: Int(shown.line)) }
+        if let outline, let id = location.declarationID, let decl = find(id, in: outline.declarations), decl.location.file == shown.file {
+            return EditorTarget(file: shown.file, line: max(Int(decl.location.line), 1))
+        }
+        return EditorTarget(file: shown.file, line: 1)
     }
 
     private var headerTitle: String {

@@ -19,7 +19,7 @@ build:
 test:
 	cd helper && go test ./...
 
-.PHONY: app app-test app-run
+.PHONY: app app-test app-run app-bundle
 
 app:
 	cd app && swift build
@@ -29,3 +29,8 @@ app-test:
 
 app-run:
 	cd app && swift run Oculuxus
+
+# dist/Oculuxus.app with the helper inside. ARCHS="arm64" for a quicker
+# single-architecture build; the default is universal (arm64 x86_64).
+app-bundle:
+	app/Bundle/bundle.sh

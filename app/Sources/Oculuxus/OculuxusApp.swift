@@ -19,7 +19,7 @@ struct OculuxusApp: App {
         }
 
         WindowGroup("Workspace", id: WindowID.workspace, for: UUID.self) { $id in
-            WorkspaceWindow(workspace: state.workspace(id))
+            WorkspaceWindow(id: id)
                 .environment(state)
         } defaultValue: {
             UUID()
@@ -79,6 +79,11 @@ struct GoCommands: Commands {
             Button("Jump to Symbol…") { state.showSymbolSearch(openWindow: openWindow) }
                 .keyboardShortcut("k", modifiers: .command)
                 .disabled(state.session?.status != .ready)
+            Button("Open in Editor") {
+                if let target = workspace?.editorTarget { EditorLauncher.open(target, settings: state.settings) }
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            .disabled(workspace?.editorTarget == nil)
             Divider()
             Button("Back") { workspace?.goBack() }
                 .keyboardShortcut("[", modifiers: .command)

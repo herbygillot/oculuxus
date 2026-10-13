@@ -10,9 +10,11 @@ swift test
 swift run Oculuxus
 ```
 
-The app runs the Go helper as a child process. For development it uses
-`bin/oculuxus-helper` in this repository, so build that first with `make build`
-at the repository root (or point `OCULUXUS_HELPER` at a helper binary). Open a
+The app runs the Go helper as a child process. It looks for the helper in
+`$OCULUXUS_HELPER`, then inside the app bundle (`Contents/MacOS/oculuxus-helper`,
+as `make app-bundle` builds it), then at `bin/oculuxus-helper` in this
+repository. For development, build that with `make build` at the repository
+root. Open a
 project with Open Folder… (⌘O), or pass a folder: `swift run Oculuxus ~/src/proj`.
 The last project is reopened on launch.
 
@@ -22,6 +24,16 @@ one. The app watches the project folder with FSEvents and, when Go files or
 module files change, asks the helper to reload them and refreshes open
 Workspaces in place. Code from `_test.go` files is hidden unless the Tests
 toolbar toggle (or View ▸ Show Code from Tests, ⇧⌘T) is on.
+
+Open in Editor (Go ▸ Open in Editor, ⇧⌘E, or the toolbar button) opens the
+shown declaration or file at its line in your editor; right-click a
+declaration, or a line in the source, to open that one. Pick the editor in
+the Font, Colors, Go and Editor popover: Visual Studio Code, Zed, GoLand,
+Sublime Text, Xcode, a custom command with `{file}` and `{line}` (run with
+`/bin/sh`), or the file's default app. Automatic uses `$VISUAL` or `$EDITOR`
+from your login shell when it names one of those editors, then the first of
+them that is installed, then the default app. Editors are found by their
+command-line tool on your login shell's PATH, or inside the app.
 
 The Navigator lists packages as a tree, nested by import-path segments below
 their module, or as a flat list of full import paths. Switch with the control
@@ -51,4 +63,5 @@ Workspace for a project into a PNG when `OCULUXUS_SNAPSHOT_DIR` is set
 | `Navigator/` | The Navigator window: project picker, project packages, dependencies by module, the standard library, as a tree or a flat list (`PackageTree.swift`). |
 | `Workspace/` | Workspace windows: package content pane, source viewer (TextKit 2 `NSTextView`), history. |
 | `Search/` | The ⌘K panel and its model. |
-| `Settings/` | Font, color scheme, Go binary and recent projects, their popover, and open panels. |
+| `Settings/` | Font, color scheme, Go binary, editor and recent projects, their popover, open panels, and Open in Editor (`Editor.swift`). |
+| `Bundle/` | `make app-bundle`: the bundle script, Info.plist template and icon drawing. |
