@@ -9,9 +9,12 @@
 //	oculuxus-helper outline DIR IMPORT_PATH
 //	oculuxus-helper source DIR IMPORT_PATH DECL_ID
 //	oculuxus-helper file DIR IMPORT_PATH FILE
+//	oculuxus-helper search DIR QUERY
 //
 // DECL_ID is "Name" for a top-level declaration or "Type.Member" for a
-// method or field.
+// method or field. -tests includes _test.go files in outlines and source;
+// search waits for the index and, with -deps, searches dependencies and
+// the standard library too.
 package main
 
 import (
@@ -22,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -34,8 +38,10 @@ func main() {
 	debug := fs.Bool("debug-json", false, "log every protocol message to stderr as JSON")
 	goBinary := fs.String("go", "", "Go binary to use instead of the one on PATH")
 	tags := fs.String("tags", "", "comma-separated build tags")
+	tests := fs.Bool("tests", false, "include _test.go files in outline, source and file")
+	deps := fs.Bool("deps", false, "search dependencies and the standard library too")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: oculuxus-helper [flags] [serve | info | packages DIR | outline DIR PKG | source DIR PKG DECL | file DIR PKG FILE]")
+		fmt.Fprintln(os.Stderr, "usage: oculuxus-helper [flags] [serve | info | packages DIR | outline DIR PKG | source DIR PKG DECL | file DIR PKG FILE | search DIR QUERY]")
 		fs.PrintDefaults()
 	}
 	fs.Parse(os.Args[1:])
@@ -54,7 +60,9 @@ func main() {
 		if *debug {
 			s.DebugLog = log.New(os.Stderr, "", log.Lmicroseconds)
 		}
-		if err := s.Serve(ctx, os.Stdin, os.Stdout); err != nil {
+		err := s.Serve(ctx, os.Stdin, os.Stdout)
+		h.Close()
+		if err != nil {
 			fmt.Fprintln(os.Stderr, "oculuxus-helper:", err)
 			os.Exit(1)
 		}
@@ -85,19 +93,31 @@ func main() {
 	case "outline":
 		need(2)
 		open(args[0])
-		resp = run(ctx, h, &pb.Request_PackageOutline{PackageOutline: &pb.PackageOutlineRequest{PackageId: args[1]}}, *debug)
+		resp = run(ctx, h, &pb.Request_PackageOutline{PackageOutline: &pb.PackageOutlineRequest{PackageId: args[1], IncludeTests: *tests}}, *debug)
 	case "source":
 		need(3)
 		open(args[0])
-		resp = run(ctx, h, &pb.Request_DeclarationSource{DeclarationSource: &pb.DeclarationSourceRequest{PackageId: args[1], DeclarationId: args[2]}}, *debug)
+		resp = run(ctx, h, &pb.Request_DeclarationSource{DeclarationSource: &pb.DeclarationSourceRequest{PackageId: args[1], DeclarationId: args[2], IncludeTests: *tests}}, *debug)
 	case "file":
 		need(3)
 		open(args[0])
-		resp = run(ctx, h, &pb.Request_FileSource{FileSource: &pb.FileSourceRequest{PackageId: args[1], File: args[2]}}, *debug)
+		resp = run(ctx, h, &pb.Request_FileSource{FileSource: &pb.FileSourceRequest{PackageId: args[1], File: args[2], IncludeTests: *tests}}, *debug)
+	case "search":
+		need(2)
+		open(args[0])
+		start := time.Now()
+		resp = run(ctx, h, &pb.Request_Search{Search: &pb.SearchRequest{Query: args[1], IncludeDependencies: *deps, Wait: true}}, *debug)
+		if *debug {
+			fmt.Fprintf(os.Stderr, "… search took %v (including indexing)\n", time.Since(start))
+			start = time.Now()
+			run(ctx, h, &pb.Request_Search{Search: &pb.SearchRequest{Query: args[1], IncludeDependencies: *deps}}, false)
+			fmt.Fprintf(os.Stderr, "… search again took %v\n", time.Since(start))
+		}
 	default:
 		fs.Usage()
 		os.Exit(2)
 	}
+	h.Close()
 	must(resp)
 	fmt.Println(protojson.MarshalOptions{Multiline: true, Indent: "  "}.Format(resp))
 }
@@ -116,6 +136,8 @@ func run(ctx context.Context, h *server.Handler, body any, debug bool) *pb.Respo
 	case *pb.Request_DeclarationSource:
 		req.Body = b
 	case *pb.Request_FileSource:
+		req.Body = b
+	case *pb.Request_Search:
 		req.Body = b
 	}
 	progress := func(msg string) {

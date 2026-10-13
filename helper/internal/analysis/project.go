@@ -35,8 +35,10 @@ type Project struct {
 	mu       sync.Mutex
 	list     *pb.ListPackagesResponse
 	meta     map[string]*packages.Package // metadata-only packages by import path
-	typed    map[string]*typedPackage     // type-checked packages by import path
+	typed    map[string]*typedPackage     // type-checked packages by typedKey
 	inflight map[string]*sync.WaitGroup
+
+	index *symbolIndex
 }
 
 // Toolchain describes the Go binary the helper uses.
@@ -116,6 +118,12 @@ func Open(ctx context.Context, tc *Toolchain, root string, buildTags []string) (
 	if err != nil || !info.IsDir() {
 		return nil, &Error{Code: pb.Error_INVALID_REQUEST, Err: fmt.Errorf("%s is not a directory", abs)}
 	}
+	// `go list -m` reports module directories with symlinks resolved, and
+	// patterns built from them only match when go/packages runs in the
+	// resolved folder too (/var is a symlink to /private/var on macOS).
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = real
+	}
 	p := &Project{
 		root:      abs,
 		env:       withoutKey(tc.Env, "GOWORK"),
@@ -160,7 +168,13 @@ func Open(ctx context.Context, tc *Toolchain, root string, buildTags []string) (
 	if len(p.modules) == 0 {
 		return nil, &Error{Code: pb.Error_LOAD_FAILED, Err: errors.New("go list -m found no modules")}
 	}
+	p.index = newSymbolIndex(indexCachePath(abs), tc.GoVersion+" "+strings.Join(p.buildFlags, " "))
 	return p, nil
+}
+
+// Close stops background work: the symbol index build.
+func (p *Project) Close() {
+	p.index.close()
 }
 
 func fileExists(path string) bool {
@@ -204,7 +218,8 @@ const metaMode = packages.NeedName | packages.NeedFiles | packages.NeedImports |
 	packages.NeedDeps | packages.NeedModule
 
 // ListPackages returns every package in the build graph. The result is
-// cached until Reload invalidates it.
+// cached until Reload invalidates it. Each new list (re)starts the symbol
+// index build.
 func (p *Project) ListPackages(ctx context.Context) (*pb.ListPackagesResponse, error) {
 	p.mu.Lock()
 	if p.list != nil {
@@ -259,6 +274,8 @@ func (p *Project) ListPackages(ctx context.Context) (*pb.ListPackagesResponse, e
 	p.list = resp
 	p.meta = meta
 	p.mu.Unlock()
+	// Index in the background; this never delays the package list.
+	p.index.update(p.targetsFor(meta))
 	return resp, nil
 }
 
@@ -316,13 +333,13 @@ func (p *Project) origin(pkg *packages.Package) pb.PackageOrigin {
 }
 
 // Reload drops cached state for the packages that contain the changed
-// files. Changes to go.mod, go.work, or the set of files in a package
-// invalidate the package list too.
+// files and re-indexes them. Changes to go.mod, go.work, or the set of
+// files in a package invalidate the package list too; the index follows
+// on the next ListPackages.
 func (p *Project) Reload(changed []string) *pb.ReloadResponse {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	resp := &pb.ReloadResponse{}
-	affected := map[string]bool{}
+	direct := map[string]bool{} // packages whose files changed
 	for _, f := range changed {
 		f, _ = filepath.Abs(f)
 		base := filepath.Base(f)
@@ -330,38 +347,56 @@ func (p *Project) Reload(changed []string) *pb.ReloadResponse {
 			resp.PackageListChanged = true
 			continue
 		}
-		dir := filepath.Dir(f)
+		// Compare directories as go list reports them, with symlinks
+		// resolved (/var is /private/var on macOS).
+		dir := canonicalDir(filepath.Dir(f))
+		_, statErr := os.Stat(f)
+		f = filepath.Join(dir, base)
 		found := false
 		for path, pkg := range p.meta {
 			if packageDir(pkg) != dir {
 				continue
 			}
 			found = true
-			affected[path] = true
-			if !containsFile(pkg, f) {
+			direct[path] = true
+			if isTestFile(f) {
+				continue // test files are not in the package list
+			}
+			if contains := containsFile(pkg, f); !contains || statErr != nil {
 				// A new or deleted file changes the package's file list.
 				resp.PackageListChanged = true
 			}
 		}
-		if !found && strings.HasSuffix(base, ".go") {
+		// Test builds and external test packages loaded from the directory.
+		for _, tp := range p.typed {
+			if packageDir(tp.pkg) == dir {
+				found = true
+				direct[tp.pkg.PkgPath] = true
+			}
+		}
+		if !found && strings.HasSuffix(base, ".go") && !isTestFile(f) {
 			// A file in a directory we have not seen: maybe a new package.
 			resp.PackageListChanged = true
 		}
+	}
+	affected := map[string]bool{}
+	for path := range direct {
+		affected[path] = true
 	}
 	if resp.PackageListChanged {
 		p.list = nil
 		p.meta = map[string]*packages.Package{}
 		// Type-checked packages may depend on anything that changed.
-		for path := range p.typed {
-			affected[path] = true
+		for _, tp := range p.typed {
+			affected[tp.pkg.PkgPath] = true
 		}
 		p.typed = map[string]*typedPackage{}
 	} else {
 		// A changed package invalidates its reverse dependencies' types too.
-		for path, tp := range p.typed {
-			if affected[path] || tp.dependsOn(affected) {
-				affected[path] = true
-				delete(p.typed, path)
+		for key, tp := range p.typed {
+			if direct[tp.pkg.PkgPath] || tp.dependsOn(direct) {
+				affected[tp.pkg.PkgPath] = true
+				delete(p.typed, key)
 			}
 		}
 	}
@@ -369,7 +404,20 @@ func (p *Project) Reload(changed []string) *pb.ReloadResponse {
 		resp.ChangedPackageIds = append(resp.ChangedPackageIds, path)
 	}
 	sort.Strings(resp.ChangedPackageIds)
+	p.mu.Unlock()
+
+	// Only the packages whose files changed need re-indexing: the index
+	// holds syntax, which other packages' changes do not affect.
+	p.index.invalidate(direct)
 	return resp
+}
+
+// canonicalDir resolves symlinks in dir, when it exists.
+func canonicalDir(dir string) string {
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		return real
+	}
+	return dir
 }
 
 func containsFile(pkg *packages.Package, path string) bool {

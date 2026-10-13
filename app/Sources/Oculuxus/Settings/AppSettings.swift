@@ -77,6 +77,10 @@ final class AppSettings {
     var themeID: String { didSet { save() } }
     /// The Go binary the user picked, or nil to find one automatically.
     var goBinary: String? { didSet { save() } }
+    /// Show declarations from _test.go files in Workspaces.
+    var showsTests: Bool { didSet { save() } }
+    /// ⌘K searches dependencies and the standard library as well.
+    var searchesDependencies: Bool { didSet { save() } }
     /// Recently opened project folders, most recent first.
     private(set) var recentProjects: [String] { didSet { save() } }
 
@@ -88,6 +92,8 @@ final class AppSettings {
         themeID = defaults.string(forKey: "theme") ?? CodeTheme.light.id
         goBinary = defaults.string(forKey: "goBinary")
         recentProjects = defaults.stringArray(forKey: "recentProjects") ?? []
+        showsTests = defaults.bool(forKey: "showsTests")
+        searchesDependencies = defaults.object(forKey: "searchesDependencies") as? Bool ?? true
     }
 
     func addRecentProject(_ rootDir: String) {
@@ -116,6 +122,8 @@ final class AppSettings {
         defaults.set(themeID, forKey: "theme")
         defaults.set(goBinary, forKey: "goBinary")
         defaults.set(recentProjects, forKey: "recentProjects")
+        defaults.set(showsTests, forKey: "showsTests")
+        defaults.set(searchesDependencies, forKey: "searchesDependencies")
     }
 }
 

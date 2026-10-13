@@ -162,6 +162,21 @@ func (h *Handler) current() (*analysis.Project, error) {
 	return h.project, nil
 }
 
+// setProject replaces the open project, stopping the old one's
+// background work.
+func (h *Handler) setProject(p *analysis.Project) {
+	h.mu.Lock()
+	old := h.project
+	h.project = p
+	h.mu.Unlock()
+	if old != nil {
+		old.Close()
+	}
+}
+
+// Close closes the open project.
+func (h *Handler) Close() { h.setProject(nil) }
+
 func (h *Handler) handle(ctx context.Context, req *pb.Request, progress func(string)) (*pb.Response, error) {
 	switch r := req.Body.(type) {
 	case *pb.Request_Info:
@@ -184,15 +199,11 @@ func (h *Handler) handle(ctx context.Context, req *pb.Request, progress func(str
 		if err != nil {
 			return nil, err
 		}
-		h.mu.Lock()
-		h.project = p
-		h.mu.Unlock()
+		h.setProject(p)
 		return &pb.Response{Body: &pb.Response_OpenProject{OpenProject: &pb.OpenProjectResponse{Project: p.Proto()}}}, nil
 
 	case *pb.Request_CloseProject:
-		h.mu.Lock()
-		h.project = nil
-		h.mu.Unlock()
+		h.setProject(nil)
 		return &pb.Response{Body: &pb.Response_Empty{Empty: &pb.Empty{}}}, nil
 
 	case *pb.Request_ListPackages:
@@ -213,7 +224,7 @@ func (h *Handler) handle(ctx context.Context, req *pb.Request, progress func(str
 			return nil, err
 		}
 		progress("Type-checking " + r.PackageOutline.PackageId)
-		tp, err := p.Typed(ctx, r.PackageOutline.PackageId)
+		tp, err := p.Typed(ctx, r.PackageOutline.PackageId, r.PackageOutline.IncludeTests)
 		if err != nil {
 			return nil, err
 		}
@@ -224,7 +235,7 @@ func (h *Handler) handle(ctx context.Context, req *pb.Request, progress func(str
 		if err != nil {
 			return nil, err
 		}
-		tp, err := p.Typed(ctx, r.DeclarationSource.PackageId)
+		tp, err := p.Typed(ctx, r.DeclarationSource.PackageId, r.DeclarationSource.IncludeTests)
 		if err != nil {
 			return nil, err
 		}
@@ -239,7 +250,7 @@ func (h *Handler) handle(ctx context.Context, req *pb.Request, progress func(str
 		if err != nil {
 			return nil, err
 		}
-		tp, err := p.Typed(ctx, r.FileSource.PackageId)
+		tp, err := p.Typed(ctx, r.FileSource.PackageId, r.FileSource.IncludeTests)
 		if err != nil {
 			return nil, err
 		}
@@ -255,6 +266,17 @@ func (h *Handler) handle(ctx context.Context, req *pb.Request, progress func(str
 			return nil, err
 		}
 		return &pb.Response{Body: &pb.Response_Reload{Reload: p.Reload(r.Reload.ChangedFiles)}}, nil
+
+	case *pb.Request_Search:
+		p, err := h.current()
+		if err != nil {
+			return nil, err
+		}
+		resp, err := p.Search(ctx, r.Search, progress)
+		if err != nil {
+			return nil, err
+		}
+		return &pb.Response{Body: &pb.Response_Search{Search: resp}}, nil
 
 	case *pb.Request_Shutdown, *pb.Request_Cancel:
 		return &pb.Response{Body: &pb.Response_Empty{Empty: &pb.Empty{}}}, nil

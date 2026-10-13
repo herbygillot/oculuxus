@@ -103,6 +103,13 @@ struct WorkspaceView: View {
                 .help("Show the selected declaration or its whole file")
             }
             ToolbarItem(placement: .primaryAction) {
+                @Bindable var settings = state.settings
+                Toggle(isOn: $settings.showsTests) {
+                    Label("Tests", systemImage: "testtube.2")
+                }
+                .help(state.settings.showsTests ? "Hide code from _test.go files" : "Show code from _test.go files")
+            }
+            ToolbarItem(placement: .primaryAction) {
                 Button { showSettings.toggle() } label: { Image(systemName: "textformat.size") }
                     .help("Font, Colors and Go")
                     .popover(isPresented: $showSettings, arrowEdge: .bottom) {
@@ -149,6 +156,15 @@ private struct PackagePanes: View {
     var open: (WorkspaceLocation, Bool) -> Void
     @State private var outline: Loadable<OcxPackageOutline> = .loading
 
+    /// What the outline depends on: reloading files bumps the revision.
+    private struct OutlineRequest: Hashable {
+        var packageID: String
+        var tests: Bool
+        var revision: Int
+    }
+
+    private var tests: Bool { session.includesTests(location.packageID, showsTests: state.settings.showsTests) }
+
     var body: some View {
         let settings = state.settings
         HSplitView {
@@ -181,14 +197,16 @@ private struct PackagePanes: View {
                 location: location,
                 outline: outline.value,
                 wholeFile: workspace.showsWholeFile,
+                tests: tests,
                 open: open
             )
             .frame(minWidth: 280)
         }
-        .task(id: location.packageID) {
+        .task(id: OutlineRequest(packageID: location.packageID, tests: tests, revision: session.revision(of: location.packageID))) {
+            // Keep showing the current outline while the same package reloads.
             if outline.value?.packageID != location.packageID { outline = .loading }
             do {
-                outline = .loaded(try await session.outline(location.packageID))
+                outline = .loaded(try await session.outline(location.packageID, tests: tests))
             } catch is CancellationError {
             } catch {
                 outline = .failed(error.localizedDescription)
@@ -206,6 +224,7 @@ private struct SourcePane: View {
     var location: WorkspaceLocation
     var outline: OcxPackageOutline?
     var wholeFile: Bool
+    var tests: Bool
     var open: (WorkspaceLocation, Bool) -> Void
 
     /// What is shown, with the file and line it starts at.
@@ -213,12 +232,18 @@ private struct SourcePane: View {
         var source: OcxFileSourceResponse
         var file: String
         var line: UInt32
+        /// The declaration or file shown, the same across reloads.
+        var document: String
     }
 
     private struct Request: Hashable {
         var packageID: String
         var declarationID: String?
         var file: String?
+        var tests: Bool
+        var revision: Int
+
+        var document: String { file ?? packageID + "#" + (declarationID ?? "") }
     }
 
     @State private var shown: Shown?
@@ -239,6 +264,7 @@ private struct SourcePane: View {
             } else {
                 SourceView(
                     file: shown?.source,
+                    document: shown?.document,
                     highlightedDeclarationID: request?.file != nil ? location.declarationID : nil,
                     theme: settings.theme,
                     font: settings.font,
@@ -287,11 +313,13 @@ private struct SourcePane: View {
     private var request: Request? {
         guard let outline, outline.packageID == location.packageID else { return nil }
         let declaration = location.declarationID.flatMap { find($0, in: outline.declarations) }
+        let revision = session.revision(of: location.packageID)
         if let declaration, !wholeFile, pickedFile == nil {
-            return Request(packageID: location.packageID, declarationID: declaration.id)
+            return Request(packageID: location.packageID, declarationID: declaration.id, tests: tests, revision: revision)
         }
-        guard let file = pickedFile ?? declaration?.location.file ?? outline.files.first?.path else { return nil }
-        return Request(packageID: location.packageID, file: file)
+        let picked = pickedFile.flatMap { path in outline.files.contains { $0.path == path } ? path : nil }
+        guard let file = picked ?? declaration?.location.file ?? outline.files.first?.path else { return nil }
+        return Request(packageID: location.packageID, file: file, tests: tests, revision: revision)
     }
 
     private func load() async {
@@ -303,13 +331,13 @@ private struct SourcePane: View {
         defer { loading = false }
         do {
             if let file = request.file {
-                let source = try await session.fileSource(packageID: request.packageID, file: file)
-                shown = Shown(source: source, file: file, line: 0)
+                let source = try await session.fileSource(packageID: request.packageID, file: file, tests: request.tests)
+                shown = Shown(source: source, file: file, line: 0, document: request.document)
             } else {
-                let decl = try await session.declarationSource(WorkspaceLocation(packageID: request.packageID, declarationID: request.declarationID))
+                let decl = try await session.declarationSource(WorkspaceLocation(packageID: request.packageID, declarationID: request.declarationID), tests: request.tests)
                 var source = OcxFileSourceResponse()
                 source.source = decl.source
-                shown = Shown(source: source, file: decl.location.file, line: decl.location.line)
+                shown = Shown(source: source, file: decl.location.file, line: decl.location.line, document: request.document)
             }
             error = nil
         } catch is CancellationError {

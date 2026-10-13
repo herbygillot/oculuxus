@@ -5,6 +5,9 @@ import SwiftUI
 /// file, highlights the selected declaration and scrolls to it.
 struct SourceView: NSViewRepresentable {
     var file: OcxFileSourceResponse?
+    /// Identifies what is shown. New text for the same document (after a
+    /// reload) keeps the scroll position; another document starts at the top.
+    var document: String?
     var highlightedDeclarationID: String?
     var theme: CodeTheme
     var font: NSFont
@@ -45,15 +48,25 @@ struct SourceView: NSViewRepresentable {
         coordinator.openReference = openReference
 
         let key = Coordinator.ContentKey(file: file, theme: theme.id, font: font)
+        var keepScroll = false
         if key != coordinator.content {
+            keepScroll = document != nil && document == coordinator.document && file != nil
+            let origin = scrollView.contentView.bounds.origin
             coordinator.content = key
+            coordinator.document = document
             coordinator.highlighted = nil
             let text = file.map { CodeText.attributed($0.source, theme: theme, font: font) } ?? NSMutableAttributedString()
             textView.textStorage?.setAttributedString(text)
             textView.backgroundColor = theme.background
             textView.insertionPointColor = theme.text
             scrollView.backgroundColor = theme.background
-            textView.scroll(.zero)
+            if keepScroll {
+                textView.layoutSubtreeIfNeeded()
+                scrollView.contentView.scroll(to: origin)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            } else {
+                textView.scroll(.zero)
+            }
         }
 
         guard highlightedDeclarationID != coordinator.highlighted else { return }
@@ -66,6 +79,7 @@ struct SourceView: NSViewRepresentable {
         else { return }
         let highlight = NSColor.selectedTextBackgroundColor.withAlphaComponent(theme.isDark ? 0.35 : 0.25)
         storage.addAttribute(.backgroundColor, value: highlight, range: nsRange)
+        if keepScroll { return }
         DispatchQueue.main.async {
             textView.scrollRangeToVisible(NSRange(location: nsRange.location, length: 0))
         }
@@ -79,6 +93,7 @@ struct SourceView: NSViewRepresentable {
         }
 
         var content: ContentKey?
+        var document: String?
         var highlighted: String?
         var openReference: ((WorkspaceLocation, Bool) -> Void)?
 

@@ -67,6 +67,7 @@ func (c *client) final(id uint64) *pb.Response {
 }
 
 func TestProtocol(t *testing.T) {
+	t.Setenv("OCULUXUS_CACHE_DIR", "off")
 	c := startServer(t)
 
 	c.send(&pb.Request{Id: 1, Body: &pb.Request_Info{Info: &pb.InfoRequest{}}})
@@ -110,6 +111,17 @@ func TestProtocol(t *testing.T) {
 	src := c.final(5).GetDeclarationSource()
 	if src == nil || src.Source.Text == "" {
 		t.Fatalf("source = %+v", src)
+	}
+
+	c.send(&pb.Request{Id: 8, Body: &pb.Request_Search{Search: &pb.SearchRequest{Query: "circle.area"}}})
+	search := c.final(8).GetSearch()
+	if search == nil || len(search.Matches) == 0 || search.Matches[0].DeclarationId != "Circle.Area" || !search.Complete {
+		t.Fatalf("search = %+v", search)
+	}
+
+	c.send(&pb.Request{Id: 9, Body: &pb.Request_PackageOutline{PackageOutline: &pb.PackageOutlineRequest{PackageId: "example.com/simple/shapes", IncludeTests: true}}})
+	if o := c.final(9).GetPackageOutline(); o == nil || o.Outline.ExternalTestPackageId != "example.com/simple/shapes_test" {
+		t.Fatalf("outline with tests = %+v", o)
 	}
 
 	// Cancelling an unknown request is harmless.

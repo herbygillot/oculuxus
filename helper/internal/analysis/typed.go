@@ -27,6 +27,7 @@ type typedPackage struct {
 	fset    *token.FileSet
 	sources map[string][]byte // file path -> contents
 	deps    map[string]bool   // transitive import paths
+	xtest   string            // with tests: the external test package, if any
 
 	// Declarations by id ("Name", "Type.Member"), and the objects they
 	// declare, for resolving references.
@@ -64,30 +65,32 @@ func (tp *typedPackage) dependsOn(paths map[string]bool) bool {
 
 // Typed returns the type-checked package with the given import path,
 // loading it on first use. Concurrent requests for the same package share
-// one load.
-func (p *Project) Typed(ctx context.Context, importPath string) (*typedPackage, error) {
+// one load. With tests, the package includes its _test.go files; an
+// external test package ("pkg_test") is only available with tests.
+func (p *Project) Typed(ctx context.Context, importPath string, tests bool) (*typedPackage, error) {
+	key := typedKey(importPath, tests)
 	for {
 		p.mu.Lock()
-		if tp, ok := p.typed[importPath]; ok {
+		if tp, ok := p.typed[key]; ok {
 			p.mu.Unlock()
 			return tp, nil
 		}
-		if wg, ok := p.inflight[importPath]; ok {
+		if wg, ok := p.inflight[key]; ok {
 			p.mu.Unlock()
 			wg.Wait()
 			continue
 		}
 		wg := &sync.WaitGroup{}
 		wg.Add(1)
-		p.inflight[importPath] = wg
+		p.inflight[key] = wg
 		p.mu.Unlock()
 
-		tp, err := p.loadTyped(ctx, importPath)
+		tp, err := p.loadTyped(ctx, importPath, tests)
 
 		p.mu.Lock()
-		delete(p.inflight, importPath)
+		delete(p.inflight, key)
 		if err == nil {
-			p.typed[importPath] = tp
+			p.typed[key] = tp
 		}
 		p.mu.Unlock()
 		wg.Done()
@@ -95,22 +98,33 @@ func (p *Project) Typed(ctx context.Context, importPath string) (*typedPackage, 
 	}
 }
 
-func (p *Project) loadTyped(ctx context.Context, importPath string) (*typedPackage, error) {
+func typedKey(importPath string, tests bool) string {
+	if tests {
+		return importPath + " [tests]"
+	}
+	return importPath
+}
+
+func (p *Project) loadTyped(ctx context.Context, importPath string, tests bool) (*typedPackage, error) {
 	if importPath == "" {
 		return nil, &Error{Code: pb.Error_INVALID_REQUEST, Err: fmt.Errorf("empty package id")}
 	}
-	pkgs, err := packages.Load(p.config(ctx, typedMode), importPath)
+	pattern := importPath
+	if tests {
+		// An external test package is loaded through the package it tests.
+		if base, ok := strings.CutSuffix(importPath, "_test"); ok && !p.listed(importPath) {
+			pattern = base
+		}
+	}
+	cfg := p.config(ctx, typedMode)
+	cfg.Tests = tests
+	pkgs, err := packages.Load(cfg, pattern)
 	if err != nil {
 		return nil, &Error{Code: pb.Error_LOAD_FAILED, Err: err}
 	}
-	var pkg *packages.Package
-	for _, c := range pkgs {
-		if c.PkgPath == importPath && !isTestVariant(c) {
-			pkg = c
-			break
-		}
-	}
-	if pkg == nil {
+	pkg := pickPackage(pkgs, importPath, tests)
+	if pkg == nil || (len(pkg.CompiledGoFiles) == 0 && len(pkg.Errors) > 0) {
+		// go list reports a missing package as one with an error and no files.
 		return nil, &Error{Code: pb.Error_NOT_FOUND, Err: fmt.Errorf("package %q not found", importPath)}
 	}
 	if pkg.Types == nil || pkg.TypesInfo == nil {
@@ -123,6 +137,13 @@ func (p *Project) loadTyped(ctx context.Context, importPath string) (*typedPacka
 		deps:    map[string]bool{},
 		decls:   map[string]*declNode{},
 		byObj:   map[types.Object]string{},
+	}
+	if tests {
+		for _, c := range pkgs {
+			if c.PkgPath == importPath+"_test" {
+				tp.xtest = c.PkgPath
+			}
+		}
 	}
 	for _, f := range pkg.CompiledGoFiles {
 		src, err := os.ReadFile(f)
@@ -151,6 +172,37 @@ func (p *Project) loadTyped(ctx context.Context, importPath string) (*typedPacka
 	return tp, nil
 }
 
+// pickPackage finds importPath among loaded packages. With tests it
+// prefers the test build of the package ("p [p.test]"), which includes the
+// package's own _test.go files.
+func pickPackage(pkgs []*packages.Package, importPath string, tests bool) *packages.Package {
+	var plain, test *packages.Package
+	for _, c := range pkgs {
+		if c.PkgPath != importPath || strings.HasSuffix(c.ID, ".test") {
+			continue
+		}
+		if isTestVariant(c) {
+			if strings.HasSuffix(c.ID, "["+strings.TrimSuffix(importPath, "_test")+".test]") {
+				test = c
+			}
+		} else {
+			plain = c
+		}
+	}
+	if tests && test != nil {
+		return test
+	}
+	return plain
+}
+
+// listed reports whether importPath is in the package list.
+func (p *Project) listed(importPath string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, ok := p.meta[importPath]
+	return ok
+}
+
 func firstError(pkg *packages.Package) string {
 	if len(pkg.Errors) > 0 {
 		return pkg.Errors[0].Error()
@@ -158,18 +210,28 @@ func firstError(pkg *packages.Package) string {
 	return "no type information"
 }
 
-// index walks the syntax and records every top-level declaration and its
-// members, in source order.
+// index records every declaration and its members, in source order.
 func (tp *typedPackage) index() {
-	info := tp.pkg.TypesInfo
+	tp.roots = declTree(tp.fset, tp.pkg.Syntax, tp.pkg.TypesInfo)
+	for _, n := range tp.roots {
+		tp.record(n)
+	}
+}
+
+// declTree walks the syntax and returns every top-level declaration, with
+// methods nested under their receiver types and fields and interface
+// methods under their types. info may be nil when only syntax is loaded;
+// the nodes then carry no objects. The symbol index and the outline both
+// use it, so declaration ids agree between the two.
+func declTree(fset *token.FileSet, files []*ast.File, info *types.Info) []*declNode {
 	var types_ []*declNode
 	var top []*declNode
-	for _, file := range tp.pkg.Syntax {
-		path := tp.fset.File(file.Pos()).Name()
+	for _, file := range files {
+		path := fset.File(file.Pos()).Name()
 		for _, d := range file.Decls {
 			switch d := d.(type) {
 			case *ast.FuncDecl:
-				n := &declNode{name: d.Name.Name, file: file, path: path, node: d, doc: d.Doc, obj: info.Defs[d.Name]}
+				n := &declNode{name: d.Name.Name, file: file, path: path, node: d, doc: d.Doc, obj: defOf(info, d.Name)}
 				if d.Recv != nil {
 					n.kind = pb.SymbolKind_METHOD
 				} else {
@@ -180,7 +242,7 @@ func (tp *typedPackage) index() {
 				for _, spec := range d.Specs {
 					switch s := spec.(type) {
 					case *ast.TypeSpec:
-						n := &declNode{name: s.Name.Name, file: file, path: path, node: s, decl: d, doc: specDoc(s.Doc, d), obj: info.Defs[s.Name]}
+						n := &declNode{name: s.Name.Name, file: file, path: path, node: s, decl: d, doc: specDoc(s.Doc, d), obj: defOf(info, s.Name)}
 						switch s.Type.(type) {
 						case *ast.StructType:
 							n.kind = pb.SymbolKind_STRUCT
@@ -190,7 +252,7 @@ func (tp *typedPackage) index() {
 							n.kind = pb.SymbolKind_TYPE
 						}
 						n.id = n.name
-						tp.addMembers(n, s)
+						addMembers(info, n, s)
 						top = append(top, n)
 						types_ = append(types_, n)
 					case *ast.ValueSpec:
@@ -202,7 +264,7 @@ func (tp *typedPackage) index() {
 							if name.Name == "_" {
 								continue
 							}
-							n := &declNode{name: name.Name, kind: kind, file: file, path: path, node: s, decl: d, doc: specDoc(s.Doc, d), obj: info.Defs[name]}
+							n := &declNode{name: name.Name, kind: kind, file: file, path: path, node: s, decl: d, doc: specDoc(s.Doc, d), obj: defOf(info, name)}
 							top = append(top, n)
 						}
 					}
@@ -222,7 +284,6 @@ func (tp *typedPackage) index() {
 			if t, ok := byName[recv]; ok {
 				n.id = t.name + "." + n.name
 				t.members = append(t.members, n)
-				tp.record(n)
 				continue
 			}
 		}
@@ -230,7 +291,6 @@ func (tp *typedPackage) index() {
 			n.id = n.name
 		}
 		roots = append(roots, n)
-		tp.record(n)
 	}
 	// Members: fields and interface methods in declaration order, then
 	// methods by file name and position (files may be parsed in any order,
@@ -250,7 +310,14 @@ func (tp *typedPackage) index() {
 			return a.node.Pos() < b.node.Pos()
 		})
 	}
-	tp.roots = roots
+	return roots
+}
+
+func defOf(info *types.Info, id *ast.Ident) types.Object {
+	if info == nil {
+		return nil
+	}
+	return info.Defs[id]
 }
 
 func isFuncDecl(n *declNode) bool {
@@ -273,8 +340,7 @@ func (tp *typedPackage) record(n *declNode) {
 }
 
 // addMembers records struct fields and interface methods as members.
-func (tp *typedPackage) addMembers(t *declNode, spec *ast.TypeSpec) {
-	info := tp.pkg.TypesInfo
+func addMembers(info *types.Info, t *declNode, spec *ast.TypeSpec) {
 	switch st := spec.Type.(type) {
 	case *ast.StructType:
 		for _, f := range st.Fields.List {
@@ -289,7 +355,7 @@ func (tp *typedPackage) addMembers(t *declNode, spec *ast.TypeSpec) {
 			for _, name := range f.Names {
 				t.members = append(t.members, &declNode{
 					id: t.name + "." + name.Name, name: name.Name, kind: pb.SymbolKind_FIELD,
-					file: t.file, path: t.path, node: f, doc: f.Doc, obj: info.Defs[name],
+					file: t.file, path: t.path, node: f, doc: f.Doc, obj: defOf(info, name),
 				})
 			}
 		}
@@ -306,7 +372,7 @@ func (tp *typedPackage) addMembers(t *declNode, spec *ast.TypeSpec) {
 			for _, name := range f.Names {
 				t.members = append(t.members, &declNode{
 					id: t.name + "." + name.Name, name: name.Name, kind: pb.SymbolKind_METHOD,
-					file: t.file, path: t.path, node: f, doc: f.Doc, obj: info.Defs[name],
+					file: t.file, path: t.path, node: f, doc: f.Doc, obj: defOf(info, name),
 				})
 			}
 		}
@@ -316,7 +382,7 @@ func (tp *typedPackage) addMembers(t *declNode, spec *ast.TypeSpec) {
 func fieldObj(info *types.Info, f *ast.Field) types.Object {
 	// An embedded field's object is defined on its type's identifier.
 	if id := typeIdent(f.Type); id != nil {
-		if obj := info.Defs[id]; obj != nil {
+		if obj := defOf(info, id); obj != nil {
 			return obj
 		}
 	}

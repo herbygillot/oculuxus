@@ -108,6 +108,8 @@ const (
 	// A named type that is neither a struct nor an interface.
 	SymbolKind_TYPE  SymbolKind = 7
 	SymbolKind_FIELD SymbolKind = 8
+	// A package; only in search results.
+	SymbolKind_PACKAGE SymbolKind = 9
 )
 
 // Enum value maps for SymbolKind.
@@ -122,6 +124,7 @@ var (
 		6: "INTERFACE",
 		7: "TYPE",
 		8: "FIELD",
+		9: "PACKAGE",
 	}
 	SymbolKind_value = map[string]int32{
 		"SYMBOL_KIND_UNSPECIFIED": 0,
@@ -133,6 +136,7 @@ var (
 		"INTERFACE":               6,
 		"TYPE":                    7,
 		"FIELD":                   8,
+		"PACKAGE":                 9,
 	}
 )
 
@@ -399,6 +403,7 @@ type Request struct {
 	//	*Request_DeclarationSource
 	//	*Request_FileSource
 	//	*Request_Reload
+	//	*Request_Search
 	Body          isRequest_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -538,6 +543,15 @@ func (x *Request) GetReload() *ReloadRequest {
 	return nil
 }
 
+func (x *Request) GetSearch() *SearchRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_Search); ok {
+			return x.Search
+		}
+	}
+	return nil
+}
+
 type isRequest_Body interface {
 	isRequest_Body()
 }
@@ -582,6 +596,10 @@ type Request_Reload struct {
 	Reload *ReloadRequest `protobuf:"bytes,16,opt,name=reload,proto3,oneof"`
 }
 
+type Request_Search struct {
+	Search *SearchRequest `protobuf:"bytes,17,opt,name=search,proto3,oneof"`
+}
+
 func (*Request_Cancel) isRequest_Body() {}
 
 func (*Request_Shutdown) isRequest_Body() {}
@@ -602,6 +620,8 @@ func (*Request_FileSource) isRequest_Body() {}
 
 func (*Request_Reload) isRequest_Body() {}
 
+func (*Request_Search) isRequest_Body() {}
+
 type Response struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The id of the Request this answers.
@@ -618,6 +638,7 @@ type Response struct {
 	//	*Response_DeclarationSource
 	//	*Response_FileSource
 	//	*Response_Reload
+	//	*Response_Search
 	Body          isResponse_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -757,6 +778,15 @@ func (x *Response) GetReload() *ReloadResponse {
 	return nil
 }
 
+func (x *Response) GetSearch() *SearchResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_Search); ok {
+			return x.Search
+		}
+	}
+	return nil
+}
+
 type isResponse_Body interface {
 	isResponse_Body()
 }
@@ -801,6 +831,10 @@ type Response_Reload struct {
 	Reload *ReloadResponse `protobuf:"bytes,16,opt,name=reload,proto3,oneof"`
 }
 
+type Response_Search struct {
+	Search *SearchResponse `protobuf:"bytes,17,opt,name=search,proto3,oneof"`
+}
+
 func (*Response_Error) isResponse_Body() {}
 
 func (*Response_Progress) isResponse_Body() {}
@@ -820,6 +854,8 @@ func (*Response_DeclarationSource) isResponse_Body() {}
 func (*Response_FileSource) isResponse_Body() {}
 
 func (*Response_Reload) isResponse_Body() {}
+
+func (*Response_Search) isResponse_Body() {}
 
 type Empty struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1644,8 +1680,12 @@ func (x *Package) GetErrors() []string {
 // only. The package stays loaded in the helper until the project is
 // closed or the package is reloaded.
 type PackageOutlineRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PackageId     string                 `protobuf:"bytes,1,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PackageId string                 `protobuf:"bytes,1,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	// Also load the package's _test.go files. Declarations from them are
+	// marked `test`. The external test package ("pkg_test") is its own
+	// package; see PackageOutline.external_test_package_id.
+	IncludeTests  bool `protobuf:"varint,2,opt,name=include_tests,json=includeTests,proto3" json:"include_tests,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1685,6 +1725,13 @@ func (x *PackageOutlineRequest) GetPackageId() string {
 		return x.PackageId
 	}
 	return ""
+}
+
+func (x *PackageOutlineRequest) GetIncludeTests() bool {
+	if x != nil {
+		return x.IncludeTests
+	}
+	return false
 }
 
 type PackageOutlineResponse struct {
@@ -1743,9 +1790,13 @@ type PackageOutline struct {
 	// methods under their type's declaration.
 	Declarations []*Declaration `protobuf:"bytes,5,rep,name=declarations,proto3" json:"declarations,omitempty"`
 	// Type-check and parse errors, if any. The outline is still returned.
-	Errors        []string `protobuf:"bytes,6,rep,name=errors,proto3" json:"errors,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Errors []string `protobuf:"bytes,6,rep,name=errors,proto3" json:"errors,omitempty"`
+	// With include_tests, the id of the package's external test package
+	// (package foo_test in the same directory), if it has one. That id works
+	// in PackageOutline and source requests with include_tests set.
+	ExternalTestPackageId string `protobuf:"bytes,7,opt,name=external_test_package_id,json=externalTestPackageId,proto3" json:"external_test_package_id,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *PackageOutline) Reset() {
@@ -1820,11 +1871,20 @@ func (x *PackageOutline) GetErrors() []string {
 	return nil
 }
 
+func (x *PackageOutline) GetExternalTestPackageId() string {
+	if x != nil {
+		return x.ExternalTestPackageId
+	}
+	return ""
+}
+
 type File struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Absolute path.
-	Path          string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// A _test.go file.
+	Test          bool `protobuf:"varint,3,opt,name=test,proto3" json:"test,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1873,6 +1933,13 @@ func (x *File) GetName() string {
 	return ""
 }
 
+func (x *File) GetTest() bool {
+	if x != nil {
+		return x.Test
+	}
+	return false
+}
+
 type Declaration struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Identifies the declaration within its package: "Name" at the top
@@ -1891,7 +1958,9 @@ type Declaration struct {
 	// Fields, interface methods, and methods, in source order.
 	Members []*Declaration `protobuf:"bytes,8,rep,name=members,proto3" json:"members,omitempty"`
 	// For FIELD: the field is an embedded type.
-	Embedded      bool `protobuf:"varint,9,opt,name=embedded,proto3" json:"embedded,omitempty"`
+	Embedded bool `protobuf:"varint,9,opt,name=embedded,proto3" json:"embedded,omitempty"`
+	// Declared in a _test.go file.
+	Test          bool `protobuf:"varint,10,opt,name=test,proto3" json:"test,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1989,6 +2058,13 @@ func (x *Declaration) GetEmbedded() bool {
 	return false
 }
 
+func (x *Declaration) GetTest() bool {
+	if x != nil {
+		return x.Test
+	}
+	return false
+}
+
 type Location struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	File          string                 `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
@@ -2054,6 +2130,8 @@ type DeclarationSourceRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PackageId     string                 `protobuf:"bytes,1,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
 	DeclarationId string                 `protobuf:"bytes,2,opt,name=declaration_id,json=declarationId,proto3" json:"declaration_id,omitempty"`
+	// As for PackageOutlineRequest.
+	IncludeTests  bool `protobuf:"varint,3,opt,name=include_tests,json=includeTests,proto3" json:"include_tests,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2100,6 +2178,13 @@ func (x *DeclarationSourceRequest) GetDeclarationId() string {
 		return x.DeclarationId
 	}
 	return ""
+}
+
+func (x *DeclarationSourceRequest) GetIncludeTests() bool {
+	if x != nil {
+		return x.IncludeTests
+	}
+	return false
 }
 
 type DeclarationSourceResponse struct {
@@ -2161,7 +2246,9 @@ type FileSourceRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	PackageId string                 `protobuf:"bytes,1,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
 	// Absolute path, as listed in PackageOutline.files.
-	File          string `protobuf:"bytes,2,opt,name=file,proto3" json:"file,omitempty"`
+	File string `protobuf:"bytes,2,opt,name=file,proto3" json:"file,omitempty"`
+	// As for PackageOutlineRequest.
+	IncludeTests  bool `protobuf:"varint,3,opt,name=include_tests,json=includeTests,proto3" json:"include_tests,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2208,6 +2295,13 @@ func (x *FileSourceRequest) GetFile() string {
 		return x.File
 	}
 	return ""
+}
+
+func (x *FileSourceRequest) GetIncludeTests() bool {
+	if x != nil {
+		return x.IncludeTests
+	}
+	return false
 }
 
 type FileSourceResponse struct {
@@ -2545,8 +2639,9 @@ func (x *SymbolRef) GetDeclarationId() string {
 }
 
 // Tells the helper which files changed on disk. The helper drops what it
-// loaded for the affected packages and, when go.mod, go.work or the set
-// of files changed, reloads the package list.
+// loaded for the affected packages, re-indexes them in the background,
+// and, when go.mod, go.work or the set of files changed, reloads the
+// package list (and the index with it) on the next ListPackages.
 type ReloadRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ChangedFiles  []string               `protobuf:"bytes,1,rep,name=changed_files,json=changedFiles,proto3" json:"changed_files,omitempty"`
@@ -2645,11 +2740,482 @@ func (x *ReloadResponse) GetPackageListChanged() bool {
 	return false
 }
 
+// Searches the symbol index: every declaration, method, field and
+// interface method, by name. The index is built in the background after
+// the first ListPackages, the project's own packages first, then
+// dependencies and the standard library. It is built from syntax alone
+// (nothing is type-checked) and cached on disk between runs.
+//
+// A search waits, sending Progress, until the project's packages are
+// indexed. Dependencies are searched as far as they are indexed unless
+// `wait` is set; `complete` says whether the results cover everything.
+type SearchRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Query string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	// At most this many matches; 0 means 50.
+	Limit uint32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Also search dependencies and the standard library.
+	IncludeDependencies bool `protobuf:"varint,3,opt,name=include_dependencies,json=includeDependencies,proto3" json:"include_dependencies,omitempty"`
+	// Wait until every package in scope is indexed.
+	Wait          bool `protobuf:"varint,4,opt,name=wait,proto3" json:"wait,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchRequest) Reset() {
+	*x = SearchRequest{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchRequest) ProtoMessage() {}
+
+func (x *SearchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchRequest.ProtoReflect.Descriptor instead.
+func (*SearchRequest) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *SearchRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *SearchRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *SearchRequest) GetIncludeDependencies() bool {
+	if x != nil {
+		return x.IncludeDependencies
+	}
+	return false
+}
+
+func (x *SearchRequest) GetWait() bool {
+	if x != nil {
+		return x.Wait
+	}
+	return false
+}
+
+type SearchResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Best match first.
+	Matches []*SymbolMatch `protobuf:"bytes,1,rep,name=matches,proto3" json:"matches,omitempty"`
+	// False while packages in scope are still being indexed.
+	Complete bool `protobuf:"varint,2,opt,name=complete,proto3" json:"complete,omitempty"`
+	// Packages in scope that are indexed, and all packages in scope.
+	IndexedPackages uint32 `protobuf:"varint,3,opt,name=indexed_packages,json=indexedPackages,proto3" json:"indexed_packages,omitempty"`
+	TotalPackages   uint32 `protobuf:"varint,4,opt,name=total_packages,json=totalPackages,proto3" json:"total_packages,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SearchResponse) Reset() {
+	*x = SearchResponse{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchResponse) ProtoMessage() {}
+
+func (x *SearchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchResponse.ProtoReflect.Descriptor instead.
+func (*SearchResponse) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *SearchResponse) GetMatches() []*SymbolMatch {
+	if x != nil {
+		return x.Matches
+	}
+	return nil
+}
+
+func (x *SearchResponse) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
+func (x *SearchResponse) GetIndexedPackages() uint32 {
+	if x != nil {
+		return x.IndexedPackages
+	}
+	return 0
+}
+
+func (x *SearchResponse) GetTotalPackages() uint32 {
+	if x != nil {
+		return x.TotalPackages
+	}
+	return 0
+}
+
+type SymbolMatch struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	PackageId   string                 `protobuf:"bytes,1,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	PackageName string                 `protobuf:"bytes,2,opt,name=package_name,json=packageName,proto3" json:"package_name,omitempty"`
+	// "Name", or "Type.Member", as in Declaration.id.
+	DeclarationId string     `protobuf:"bytes,3,opt,name=declaration_id,json=declarationId,proto3" json:"declaration_id,omitempty"`
+	Kind          SymbolKind `protobuf:"varint,4,opt,name=kind,proto3,enum=oculuxus.v1.SymbolKind" json:"kind,omitempty"`
+	// The declaration on one line, without highlighting.
+	Signature string        `protobuf:"bytes,5,opt,name=signature,proto3" json:"signature,omitempty"`
+	Location  *Location     `protobuf:"bytes,6,opt,name=location,proto3" json:"location,omitempty"`
+	Origin    PackageOrigin `protobuf:"varint,7,opt,name=origin,proto3,enum=oculuxus.v1.PackageOrigin" json:"origin,omitempty"`
+	// The parts of declaration_id that matched the query.
+	Matched       []*Range `protobuf:"bytes,8,rep,name=matched,proto3" json:"matched,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SymbolMatch) Reset() {
+	*x = SymbolMatch{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SymbolMatch) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SymbolMatch) ProtoMessage() {}
+
+func (x *SymbolMatch) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SymbolMatch.ProtoReflect.Descriptor instead.
+func (*SymbolMatch) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *SymbolMatch) GetPackageId() string {
+	if x != nil {
+		return x.PackageId
+	}
+	return ""
+}
+
+func (x *SymbolMatch) GetPackageName() string {
+	if x != nil {
+		return x.PackageName
+	}
+	return ""
+}
+
+func (x *SymbolMatch) GetDeclarationId() string {
+	if x != nil {
+		return x.DeclarationId
+	}
+	return ""
+}
+
+func (x *SymbolMatch) GetKind() SymbolKind {
+	if x != nil {
+		return x.Kind
+	}
+	return SymbolKind_SYMBOL_KIND_UNSPECIFIED
+}
+
+func (x *SymbolMatch) GetSignature() string {
+	if x != nil {
+		return x.Signature
+	}
+	return ""
+}
+
+func (x *SymbolMatch) GetLocation() *Location {
+	if x != nil {
+		return x.Location
+	}
+	return nil
+}
+
+func (x *SymbolMatch) GetOrigin() PackageOrigin {
+	if x != nil {
+		return x.Origin
+	}
+	return PackageOrigin_PACKAGE_ORIGIN_UNSPECIFIED
+}
+
+func (x *SymbolMatch) GetMatched() []*Range {
+	if x != nil {
+		return x.Matched
+	}
+	return nil
+}
+
+// The on-disk index cache, one file per project. Not sent over the wire.
+type SymbolIndex struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Bumped when the indexing rules change; older caches are ignored.
+	Format uint32 `protobuf:"varint,1,opt,name=format,proto3" json:"format,omitempty"`
+	// The Go version and build flags the index was built with.
+	Build         string            `protobuf:"bytes,2,opt,name=build,proto3" json:"build,omitempty"`
+	Packages      []*IndexedPackage `protobuf:"bytes,3,rep,name=packages,proto3" json:"packages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SymbolIndex) Reset() {
+	*x = SymbolIndex{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SymbolIndex) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SymbolIndex) ProtoMessage() {}
+
+func (x *SymbolIndex) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SymbolIndex.ProtoReflect.Descriptor instead.
+func (*SymbolIndex) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *SymbolIndex) GetFormat() uint32 {
+	if x != nil {
+		return x.Format
+	}
+	return 0
+}
+
+func (x *SymbolIndex) GetBuild() string {
+	if x != nil {
+		return x.Build
+	}
+	return ""
+}
+
+func (x *SymbolIndex) GetPackages() []*IndexedPackage {
+	if x != nil {
+		return x.Packages
+	}
+	return nil
+}
+
+type IndexedPackage struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	PackageId string                 `protobuf:"bytes,1,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	// A hash of the package's files' names, sizes and modification times.
+	Fingerprint   []byte           `protobuf:"bytes,2,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
+	Files         []string         `protobuf:"bytes,3,rep,name=files,proto3" json:"files,omitempty"`
+	Symbols       []*IndexedSymbol `protobuf:"bytes,4,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IndexedPackage) Reset() {
+	*x = IndexedPackage{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IndexedPackage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IndexedPackage) ProtoMessage() {}
+
+func (x *IndexedPackage) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IndexedPackage.ProtoReflect.Descriptor instead.
+func (*IndexedPackage) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *IndexedPackage) GetPackageId() string {
+	if x != nil {
+		return x.PackageId
+	}
+	return ""
+}
+
+func (x *IndexedPackage) GetFingerprint() []byte {
+	if x != nil {
+		return x.Fingerprint
+	}
+	return nil
+}
+
+func (x *IndexedPackage) GetFiles() []string {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *IndexedPackage) GetSymbols() []*IndexedSymbol {
+	if x != nil {
+		return x.Symbols
+	}
+	return nil
+}
+
+type IndexedSymbol struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DeclarationId string                 `protobuf:"bytes,1,opt,name=declaration_id,json=declarationId,proto3" json:"declaration_id,omitempty"`
+	Kind          SymbolKind             `protobuf:"varint,2,opt,name=kind,proto3,enum=oculuxus.v1.SymbolKind" json:"kind,omitempty"`
+	Signature     string                 `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
+	// Index into IndexedPackage.files.
+	File          uint32 `protobuf:"varint,4,opt,name=file,proto3" json:"file,omitempty"`
+	Line          uint32 `protobuf:"varint,5,opt,name=line,proto3" json:"line,omitempty"`
+	Column        uint32 `protobuf:"varint,6,opt,name=column,proto3" json:"column,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IndexedSymbol) Reset() {
+	*x = IndexedSymbol{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IndexedSymbol) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IndexedSymbol) ProtoMessage() {}
+
+func (x *IndexedSymbol) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IndexedSymbol.ProtoReflect.Descriptor instead.
+func (*IndexedSymbol) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *IndexedSymbol) GetDeclarationId() string {
+	if x != nil {
+		return x.DeclarationId
+	}
+	return ""
+}
+
+func (x *IndexedSymbol) GetKind() SymbolKind {
+	if x != nil {
+		return x.Kind
+	}
+	return SymbolKind_SYMBOL_KIND_UNSPECIFIED
+}
+
+func (x *IndexedSymbol) GetSignature() string {
+	if x != nil {
+		return x.Signature
+	}
+	return ""
+}
+
+func (x *IndexedSymbol) GetFile() uint32 {
+	if x != nil {
+		return x.File
+	}
+	return 0
+}
+
+func (x *IndexedSymbol) GetLine() uint32 {
+	if x != nil {
+		return x.Line
+	}
+	return 0
+}
+
+func (x *IndexedSymbol) GetColumn() uint32 {
+	if x != nil {
+		return x.Column
+	}
+	return 0
+}
+
 var File_oculuxus_v1_oculuxus_proto protoreflect.FileDescriptor
 
 const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\n" +
-	"\x1aoculuxus/v1/oculuxus.proto\x12\voculuxus.v1\"\xad\x05\n" +
+	"\x1aoculuxus/v1/oculuxus.proto\x12\voculuxus.v1\"\xe3\x05\n" +
 	"\aRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12-\n" +
 	"\x06cancel\x18\x02 \x01(\v2\x13.oculuxus.v1.CancelH\x00R\x06cancel\x123\n" +
@@ -2663,8 +3229,9 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\x12declaration_source\x18\x0e \x01(\v2%.oculuxus.v1.DeclarationSourceRequestH\x00R\x11declarationSource\x12A\n" +
 	"\vfile_source\x18\x0f \x01(\v2\x1e.oculuxus.v1.FileSourceRequestH\x00R\n" +
 	"fileSource\x124\n" +
-	"\x06reload\x18\x10 \x01(\v2\x1a.oculuxus.v1.ReloadRequestH\x00R\x06reloadB\x06\n" +
-	"\x04body\"\x95\x05\n" +
+	"\x06reload\x18\x10 \x01(\v2\x1a.oculuxus.v1.ReloadRequestH\x00R\x06reload\x124\n" +
+	"\x06search\x18\x11 \x01(\v2\x1a.oculuxus.v1.SearchRequestH\x00R\x06searchB\x06\n" +
+	"\x04body\"\xcc\x05\n" +
 	"\bResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12*\n" +
 	"\x05error\x18\x02 \x01(\v2\x12.oculuxus.v1.ErrorH\x00R\x05error\x123\n" +
@@ -2678,7 +3245,8 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\x12declaration_source\x18\x0e \x01(\v2&.oculuxus.v1.DeclarationSourceResponseH\x00R\x11declarationSource\x12B\n" +
 	"\vfile_source\x18\x0f \x01(\v2\x1f.oculuxus.v1.FileSourceResponseH\x00R\n" +
 	"fileSource\x125\n" +
-	"\x06reload\x18\x10 \x01(\v2\x1b.oculuxus.v1.ReloadResponseH\x00R\x06reloadB\x06\n" +
+	"\x06reload\x18\x10 \x01(\v2\x1b.oculuxus.v1.ReloadResponseH\x00R\x06reload\x125\n" +
+	"\x06search\x18\x11 \x01(\v2\x1b.oculuxus.v1.SearchResponseH\x00R\x06searchB\x06\n" +
 	"\x04body\"\a\n" +
 	"\x05Empty\"'\n" +
 	"\x06Cancel\x12\x1d\n" +
@@ -2744,12 +3312,13 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"modulePath\x12%\n" +
 	"\x0emodule_version\x18\a \x01(\tR\rmoduleVersion\x12\x18\n" +
 	"\aimports\x18\b \x03(\tR\aimports\x12\x16\n" +
-	"\x06errors\x18\t \x03(\tR\x06errors\"6\n" +
+	"\x06errors\x18\t \x03(\tR\x06errors\"[\n" +
 	"\x15PackageOutlineRequest\x12\x1d\n" +
 	"\n" +
-	"package_id\x18\x01 \x01(\tR\tpackageId\"O\n" +
+	"package_id\x18\x01 \x01(\tR\tpackageId\x12#\n" +
+	"\rinclude_tests\x18\x02 \x01(\bR\fincludeTests\"O\n" +
 	"\x16PackageOutlineResponse\x125\n" +
-	"\aoutline\x18\x01 \x01(\v2\x1b.oculuxus.v1.PackageOutlineR\aoutline\"\xd4\x01\n" +
+	"\aoutline\x18\x01 \x01(\v2\x1b.oculuxus.v1.PackageOutlineR\aoutline\"\x8d\x02\n" +
 	"\x0ePackageOutline\x12\x1d\n" +
 	"\n" +
 	"package_id\x18\x01 \x01(\tR\tpackageId\x12\x12\n" +
@@ -2757,10 +3326,12 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\x03doc\x18\x03 \x01(\tR\x03doc\x12'\n" +
 	"\x05files\x18\x04 \x03(\v2\x11.oculuxus.v1.FileR\x05files\x12<\n" +
 	"\fdeclarations\x18\x05 \x03(\v2\x18.oculuxus.v1.DeclarationR\fdeclarations\x12\x16\n" +
-	"\x06errors\x18\x06 \x03(\tR\x06errors\".\n" +
+	"\x06errors\x18\x06 \x03(\tR\x06errors\x127\n" +
+	"\x18external_test_package_id\x18\a \x01(\tR\x15externalTestPackageId\"B\n" +
 	"\x04File\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"\xc0\x02\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04test\x18\x03 \x01(\bR\x04test\"\xd4\x02\n" +
 	"\vDeclaration\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x17.oculuxus.v1.SymbolKindR\x04kind\x12\x12\n" +
@@ -2770,22 +3341,26 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\x03doc\x18\x06 \x01(\tR\x03doc\x121\n" +
 	"\blocation\x18\a \x01(\v2\x15.oculuxus.v1.LocationR\blocation\x122\n" +
 	"\amembers\x18\b \x03(\v2\x18.oculuxus.v1.DeclarationR\amembers\x12\x1a\n" +
-	"\bembedded\x18\t \x01(\bR\bembedded\"J\n" +
+	"\bembedded\x18\t \x01(\bR\bembedded\x12\x12\n" +
+	"\x04test\x18\n" +
+	" \x01(\bR\x04test\"J\n" +
 	"\bLocation\x12\x12\n" +
 	"\x04file\x18\x01 \x01(\tR\x04file\x12\x12\n" +
 	"\x04line\x18\x02 \x01(\rR\x04line\x12\x16\n" +
-	"\x06column\x18\x03 \x01(\rR\x06column\"`\n" +
+	"\x06column\x18\x03 \x01(\rR\x06column\"\x85\x01\n" +
 	"\x18DeclarationSourceRequest\x12\x1d\n" +
 	"\n" +
 	"package_id\x18\x01 \x01(\tR\tpackageId\x12%\n" +
-	"\x0edeclaration_id\x18\x02 \x01(\tR\rdeclarationId\"y\n" +
+	"\x0edeclaration_id\x18\x02 \x01(\tR\rdeclarationId\x12#\n" +
+	"\rinclude_tests\x18\x03 \x01(\bR\fincludeTests\"y\n" +
 	"\x19DeclarationSourceResponse\x12)\n" +
 	"\x06source\x18\x01 \x01(\v2\x11.oculuxus.v1.TextR\x06source\x121\n" +
-	"\blocation\x18\x02 \x01(\v2\x15.oculuxus.v1.LocationR\blocation\"F\n" +
+	"\blocation\x18\x02 \x01(\v2\x15.oculuxus.v1.LocationR\blocation\"k\n" +
 	"\x11FileSourceRequest\x12\x1d\n" +
 	"\n" +
 	"package_id\x18\x01 \x01(\tR\tpackageId\x12\x12\n" +
-	"\x04file\x18\x02 \x01(\tR\x04file\"\x82\x01\n" +
+	"\x04file\x18\x02 \x01(\tR\x04file\x12#\n" +
+	"\rinclude_tests\x18\x03 \x01(\bR\fincludeTests\"\x82\x01\n" +
 	"\x12FileSourceResponse\x12)\n" +
 	"\x06source\x18\x01 \x01(\v2\x11.oculuxus.v1.TextR\x06source\x12A\n" +
 	"\fdeclarations\x18\x02 \x03(\v2\x1d.oculuxus.v1.DeclarationRangeR\fdeclarations\"c\n" +
@@ -2811,14 +3386,51 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\rchanged_files\x18\x01 \x03(\tR\fchangedFiles\"r\n" +
 	"\x0eReloadResponse\x12.\n" +
 	"\x13changed_package_ids\x18\x01 \x03(\tR\x11changedPackageIds\x120\n" +
-	"\x14package_list_changed\x18\x02 \x01(\bR\x12packageListChanged*X\n" +
+	"\x14package_list_changed\x18\x02 \x01(\bR\x12packageListChanged\"\x82\x01\n" +
+	"\rSearchRequest\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\rR\x05limit\x121\n" +
+	"\x14include_dependencies\x18\x03 \x01(\bR\x13includeDependencies\x12\x12\n" +
+	"\x04wait\x18\x04 \x01(\bR\x04wait\"\xb2\x01\n" +
+	"\x0eSearchResponse\x122\n" +
+	"\amatches\x18\x01 \x03(\v2\x18.oculuxus.v1.SymbolMatchR\amatches\x12\x1a\n" +
+	"\bcomplete\x18\x02 \x01(\bR\bcomplete\x12)\n" +
+	"\x10indexed_packages\x18\x03 \x01(\rR\x0findexedPackages\x12%\n" +
+	"\x0etotal_packages\x18\x04 \x01(\rR\rtotalPackages\"\xd6\x02\n" +
+	"\vSymbolMatch\x12\x1d\n" +
+	"\n" +
+	"package_id\x18\x01 \x01(\tR\tpackageId\x12!\n" +
+	"\fpackage_name\x18\x02 \x01(\tR\vpackageName\x12%\n" +
+	"\x0edeclaration_id\x18\x03 \x01(\tR\rdeclarationId\x12+\n" +
+	"\x04kind\x18\x04 \x01(\x0e2\x17.oculuxus.v1.SymbolKindR\x04kind\x12\x1c\n" +
+	"\tsignature\x18\x05 \x01(\tR\tsignature\x121\n" +
+	"\blocation\x18\x06 \x01(\v2\x15.oculuxus.v1.LocationR\blocation\x122\n" +
+	"\x06origin\x18\a \x01(\x0e2\x1a.oculuxus.v1.PackageOriginR\x06origin\x12,\n" +
+	"\amatched\x18\b \x03(\v2\x12.oculuxus.v1.RangeR\amatched\"t\n" +
+	"\vSymbolIndex\x12\x16\n" +
+	"\x06format\x18\x01 \x01(\rR\x06format\x12\x14\n" +
+	"\x05build\x18\x02 \x01(\tR\x05build\x127\n" +
+	"\bpackages\x18\x03 \x03(\v2\x1b.oculuxus.v1.IndexedPackageR\bpackages\"\x9d\x01\n" +
+	"\x0eIndexedPackage\x12\x1d\n" +
+	"\n" +
+	"package_id\x18\x01 \x01(\tR\tpackageId\x12 \n" +
+	"\vfingerprint\x18\x02 \x01(\fR\vfingerprint\x12\x14\n" +
+	"\x05files\x18\x03 \x03(\tR\x05files\x124\n" +
+	"\asymbols\x18\x04 \x03(\v2\x1a.oculuxus.v1.IndexedSymbolR\asymbols\"\xc1\x01\n" +
+	"\rIndexedSymbol\x12%\n" +
+	"\x0edeclaration_id\x18\x01 \x01(\tR\rdeclarationId\x12+\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x17.oculuxus.v1.SymbolKindR\x04kind\x12\x1c\n" +
+	"\tsignature\x18\x03 \x01(\tR\tsignature\x12\x12\n" +
+	"\x04file\x18\x04 \x01(\rR\x04file\x12\x12\n" +
+	"\x04line\x18\x05 \x01(\rR\x04line\x12\x16\n" +
+	"\x06column\x18\x06 \x01(\rR\x06column*X\n" +
 	"\rPackageOrigin\x12\x1e\n" +
 	"\x1aPACKAGE_ORIGIN_UNSPECIFIED\x10\x00\x12\v\n" +
 	"\aPROJECT\x10\x01\x12\x0e\n" +
 	"\n" +
 	"DEPENDENCY\x10\x02\x12\n" +
 	"\n" +
-	"\x06STDLIB\x10\x03*\x83\x01\n" +
+	"\x06STDLIB\x10\x03*\x90\x01\n" +
 	"\n" +
 	"SymbolKind\x12\x1b\n" +
 	"\x17SYMBOL_KIND_UNSPECIFIED\x10\x00\x12\t\n" +
@@ -2831,7 +3443,8 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\x06STRUCT\x10\x05\x12\r\n" +
 	"\tINTERFACE\x10\x06\x12\b\n" +
 	"\x04TYPE\x10\a\x12\t\n" +
-	"\x05FIELD\x10\b*\xae\x02\n" +
+	"\x05FIELD\x10\b\x12\v\n" +
+	"\aPACKAGE\x10\t*\xae\x02\n" +
 	"\tTokenType\x12\x1a\n" +
 	"\x16TOKEN_TYPE_UNSPECIFIED\x10\x00\x12\v\n" +
 	"\aKEYWORD\x10\x01\x12\v\n" +
@@ -2875,7 +3488,7 @@ func file_oculuxus_v1_oculuxus_proto_rawDescGZIP() []byte {
 }
 
 var file_oculuxus_v1_oculuxus_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_oculuxus_v1_oculuxus_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_oculuxus_v1_oculuxus_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_oculuxus_v1_oculuxus_proto_goTypes = []any{
 	(PackageOrigin)(0),                // 0: oculuxus.v1.PackageOrigin
 	(SymbolKind)(0),                   // 1: oculuxus.v1.SymbolKind
@@ -2916,6 +3529,12 @@ var file_oculuxus_v1_oculuxus_proto_goTypes = []any{
 	(*SymbolRef)(nil),                 // 36: oculuxus.v1.SymbolRef
 	(*ReloadRequest)(nil),             // 37: oculuxus.v1.ReloadRequest
 	(*ReloadResponse)(nil),            // 38: oculuxus.v1.ReloadResponse
+	(*SearchRequest)(nil),             // 39: oculuxus.v1.SearchRequest
+	(*SearchResponse)(nil),            // 40: oculuxus.v1.SearchResponse
+	(*SymbolMatch)(nil),               // 41: oculuxus.v1.SymbolMatch
+	(*SymbolIndex)(nil),               // 42: oculuxus.v1.SymbolIndex
+	(*IndexedPackage)(nil),            // 43: oculuxus.v1.IndexedPackage
+	(*IndexedSymbol)(nil),             // 44: oculuxus.v1.IndexedSymbol
 }
 var file_oculuxus_v1_oculuxus_proto_depIdxs = []int32{
 	8,  // 0: oculuxus.v1.Request.cancel:type_name -> oculuxus.v1.Cancel
@@ -2928,43 +3547,53 @@ var file_oculuxus_v1_oculuxus_proto_depIdxs = []int32{
 	28, // 7: oculuxus.v1.Request.declaration_source:type_name -> oculuxus.v1.DeclarationSourceRequest
 	30, // 8: oculuxus.v1.Request.file_source:type_name -> oculuxus.v1.FileSourceRequest
 	37, // 9: oculuxus.v1.Request.reload:type_name -> oculuxus.v1.ReloadRequest
-	10, // 10: oculuxus.v1.Response.error:type_name -> oculuxus.v1.Error
-	11, // 11: oculuxus.v1.Response.progress:type_name -> oculuxus.v1.Progress
-	7,  // 12: oculuxus.v1.Response.empty:type_name -> oculuxus.v1.Empty
-	13, // 13: oculuxus.v1.Response.info:type_name -> oculuxus.v1.InfoResponse
-	15, // 14: oculuxus.v1.Response.open_project:type_name -> oculuxus.v1.OpenProjectResponse
-	20, // 15: oculuxus.v1.Response.list_packages:type_name -> oculuxus.v1.ListPackagesResponse
-	23, // 16: oculuxus.v1.Response.package_outline:type_name -> oculuxus.v1.PackageOutlineResponse
-	29, // 17: oculuxus.v1.Response.declaration_source:type_name -> oculuxus.v1.DeclarationSourceResponse
-	31, // 18: oculuxus.v1.Response.file_source:type_name -> oculuxus.v1.FileSourceResponse
-	38, // 19: oculuxus.v1.Response.reload:type_name -> oculuxus.v1.ReloadResponse
-	4,  // 20: oculuxus.v1.Error.code:type_name -> oculuxus.v1.Error.Code
-	16, // 21: oculuxus.v1.OpenProjectResponse.project:type_name -> oculuxus.v1.Project
-	17, // 22: oculuxus.v1.Project.modules:type_name -> oculuxus.v1.Module
-	21, // 23: oculuxus.v1.ListPackagesResponse.packages:type_name -> oculuxus.v1.Package
-	17, // 24: oculuxus.v1.ListPackagesResponse.modules:type_name -> oculuxus.v1.Module
-	0,  // 25: oculuxus.v1.Package.origin:type_name -> oculuxus.v1.PackageOrigin
-	24, // 26: oculuxus.v1.PackageOutlineResponse.outline:type_name -> oculuxus.v1.PackageOutline
-	25, // 27: oculuxus.v1.PackageOutline.files:type_name -> oculuxus.v1.File
-	26, // 28: oculuxus.v1.PackageOutline.declarations:type_name -> oculuxus.v1.Declaration
-	1,  // 29: oculuxus.v1.Declaration.kind:type_name -> oculuxus.v1.SymbolKind
-	33, // 30: oculuxus.v1.Declaration.signature:type_name -> oculuxus.v1.Text
-	27, // 31: oculuxus.v1.Declaration.location:type_name -> oculuxus.v1.Location
-	26, // 32: oculuxus.v1.Declaration.members:type_name -> oculuxus.v1.Declaration
-	33, // 33: oculuxus.v1.DeclarationSourceResponse.source:type_name -> oculuxus.v1.Text
-	27, // 34: oculuxus.v1.DeclarationSourceResponse.location:type_name -> oculuxus.v1.Location
-	33, // 35: oculuxus.v1.FileSourceResponse.source:type_name -> oculuxus.v1.Text
-	32, // 36: oculuxus.v1.FileSourceResponse.declarations:type_name -> oculuxus.v1.DeclarationRange
-	34, // 37: oculuxus.v1.DeclarationRange.range:type_name -> oculuxus.v1.Range
-	35, // 38: oculuxus.v1.Text.tokens:type_name -> oculuxus.v1.Token
-	34, // 39: oculuxus.v1.Token.range:type_name -> oculuxus.v1.Range
-	2,  // 40: oculuxus.v1.Token.type:type_name -> oculuxus.v1.TokenType
-	36, // 41: oculuxus.v1.Token.target:type_name -> oculuxus.v1.SymbolRef
-	42, // [42:42] is the sub-list for method output_type
-	42, // [42:42] is the sub-list for method input_type
-	42, // [42:42] is the sub-list for extension type_name
-	42, // [42:42] is the sub-list for extension extendee
-	0,  // [0:42] is the sub-list for field type_name
+	39, // 10: oculuxus.v1.Request.search:type_name -> oculuxus.v1.SearchRequest
+	10, // 11: oculuxus.v1.Response.error:type_name -> oculuxus.v1.Error
+	11, // 12: oculuxus.v1.Response.progress:type_name -> oculuxus.v1.Progress
+	7,  // 13: oculuxus.v1.Response.empty:type_name -> oculuxus.v1.Empty
+	13, // 14: oculuxus.v1.Response.info:type_name -> oculuxus.v1.InfoResponse
+	15, // 15: oculuxus.v1.Response.open_project:type_name -> oculuxus.v1.OpenProjectResponse
+	20, // 16: oculuxus.v1.Response.list_packages:type_name -> oculuxus.v1.ListPackagesResponse
+	23, // 17: oculuxus.v1.Response.package_outline:type_name -> oculuxus.v1.PackageOutlineResponse
+	29, // 18: oculuxus.v1.Response.declaration_source:type_name -> oculuxus.v1.DeclarationSourceResponse
+	31, // 19: oculuxus.v1.Response.file_source:type_name -> oculuxus.v1.FileSourceResponse
+	38, // 20: oculuxus.v1.Response.reload:type_name -> oculuxus.v1.ReloadResponse
+	40, // 21: oculuxus.v1.Response.search:type_name -> oculuxus.v1.SearchResponse
+	4,  // 22: oculuxus.v1.Error.code:type_name -> oculuxus.v1.Error.Code
+	16, // 23: oculuxus.v1.OpenProjectResponse.project:type_name -> oculuxus.v1.Project
+	17, // 24: oculuxus.v1.Project.modules:type_name -> oculuxus.v1.Module
+	21, // 25: oculuxus.v1.ListPackagesResponse.packages:type_name -> oculuxus.v1.Package
+	17, // 26: oculuxus.v1.ListPackagesResponse.modules:type_name -> oculuxus.v1.Module
+	0,  // 27: oculuxus.v1.Package.origin:type_name -> oculuxus.v1.PackageOrigin
+	24, // 28: oculuxus.v1.PackageOutlineResponse.outline:type_name -> oculuxus.v1.PackageOutline
+	25, // 29: oculuxus.v1.PackageOutline.files:type_name -> oculuxus.v1.File
+	26, // 30: oculuxus.v1.PackageOutline.declarations:type_name -> oculuxus.v1.Declaration
+	1,  // 31: oculuxus.v1.Declaration.kind:type_name -> oculuxus.v1.SymbolKind
+	33, // 32: oculuxus.v1.Declaration.signature:type_name -> oculuxus.v1.Text
+	27, // 33: oculuxus.v1.Declaration.location:type_name -> oculuxus.v1.Location
+	26, // 34: oculuxus.v1.Declaration.members:type_name -> oculuxus.v1.Declaration
+	33, // 35: oculuxus.v1.DeclarationSourceResponse.source:type_name -> oculuxus.v1.Text
+	27, // 36: oculuxus.v1.DeclarationSourceResponse.location:type_name -> oculuxus.v1.Location
+	33, // 37: oculuxus.v1.FileSourceResponse.source:type_name -> oculuxus.v1.Text
+	32, // 38: oculuxus.v1.FileSourceResponse.declarations:type_name -> oculuxus.v1.DeclarationRange
+	34, // 39: oculuxus.v1.DeclarationRange.range:type_name -> oculuxus.v1.Range
+	35, // 40: oculuxus.v1.Text.tokens:type_name -> oculuxus.v1.Token
+	34, // 41: oculuxus.v1.Token.range:type_name -> oculuxus.v1.Range
+	2,  // 42: oculuxus.v1.Token.type:type_name -> oculuxus.v1.TokenType
+	36, // 43: oculuxus.v1.Token.target:type_name -> oculuxus.v1.SymbolRef
+	41, // 44: oculuxus.v1.SearchResponse.matches:type_name -> oculuxus.v1.SymbolMatch
+	1,  // 45: oculuxus.v1.SymbolMatch.kind:type_name -> oculuxus.v1.SymbolKind
+	27, // 46: oculuxus.v1.SymbolMatch.location:type_name -> oculuxus.v1.Location
+	0,  // 47: oculuxus.v1.SymbolMatch.origin:type_name -> oculuxus.v1.PackageOrigin
+	34, // 48: oculuxus.v1.SymbolMatch.matched:type_name -> oculuxus.v1.Range
+	43, // 49: oculuxus.v1.SymbolIndex.packages:type_name -> oculuxus.v1.IndexedPackage
+	44, // 50: oculuxus.v1.IndexedPackage.symbols:type_name -> oculuxus.v1.IndexedSymbol
+	1,  // 51: oculuxus.v1.IndexedSymbol.kind:type_name -> oculuxus.v1.SymbolKind
+	52, // [52:52] is the sub-list for method output_type
+	52, // [52:52] is the sub-list for method input_type
+	52, // [52:52] is the sub-list for extension type_name
+	52, // [52:52] is the sub-list for extension extendee
+	0,  // [0:52] is the sub-list for field type_name
 }
 
 func init() { file_oculuxus_v1_oculuxus_proto_init() }
@@ -2983,6 +3612,7 @@ func file_oculuxus_v1_oculuxus_proto_init() {
 		(*Request_DeclarationSource)(nil),
 		(*Request_FileSource)(nil),
 		(*Request_Reload)(nil),
+		(*Request_Search)(nil),
 	}
 	file_oculuxus_v1_oculuxus_proto_msgTypes[1].OneofWrappers = []any{
 		(*Response_Error)(nil),
@@ -2995,6 +3625,7 @@ func file_oculuxus_v1_oculuxus_proto_init() {
 		(*Response_DeclarationSource)(nil),
 		(*Response_FileSource)(nil),
 		(*Response_Reload)(nil),
+		(*Response_Search)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -3002,7 +3633,7 @@ func file_oculuxus_v1_oculuxus_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_oculuxus_v1_oculuxus_proto_rawDesc), len(file_oculuxus_v1_oculuxus_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   34,
+			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
