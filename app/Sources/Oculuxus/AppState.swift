@@ -26,9 +26,57 @@ final class WorkspaceModel: Identifiable {
     /// Set once the window is closed. SwiftUI may still evaluate a closed
     /// window's content, so a closed model must never be shown in again.
     var isClosed = false
+    /// How the panes share the width.
+    var split = WorkspaceSplitLayout()
+    /// Counts outline presses; `pendingOutlineClick` is the one that has not
+    /// widened the outline yet.
+    @ObservationIgnored private var outlineClicks = 0
+    @ObservationIgnored private var pendingOutlineClick: Int?
 
-    init(id: UUID) {
+    init(id: UUID, split: Double? = nil) {
         self.id = id
+        self.split.manualShare = split
+    }
+
+    /// Gives `pane` the wide share, animated, unless the user set the split.
+    func widen(_ pane: WorkspacePane) {
+        guard split.isAutomatic, split.widePane != pane else { return }
+        withAnimation(.easeInOut(duration: 0.25)) { split.widePane = pane }
+    }
+
+    /// A press in a pane. The source viewer widens at once. The outline
+    /// waits for the release: a press that selects a declaration widens the
+    /// source viewer instead (see `declarationClicked`). Releases lost to a
+    /// tracking loop (a scroller) are covered by a timeout.
+    func paneClicked(_ pane: WorkspacePane, _ phase: MousePhase) {
+        switch (pane, phase) {
+        case (.source, .down):
+            pendingOutlineClick = nil
+            widen(.source)
+        case (.source, .up):
+            break
+        case (.outline, .down):
+            outlineClicks += 1
+            let click = outlineClicks
+            pendingOutlineClick = click
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.finishOutlineClick(click) }
+        case (.outline, .up):
+            guard let click = pendingOutlineClick else { return }
+            // After SwiftUI has handled the release, which may select.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.finishOutlineClick(click) }
+        }
+    }
+
+    func finishOutlineClick(_ click: Int) {
+        guard pendingOutlineClick == click else { return }
+        pendingOutlineClick = nil
+        widen(.outline)
+    }
+
+    /// A declaration was clicked in the outline: the user wants to read it.
+    func declarationClicked() {
+        pendingOutlineClick = nil
+        widen(.source)
     }
 
     var location: WorkspaceLocation? {
@@ -76,15 +124,13 @@ final class AppState {
     @ObservationIgnored private var closedWorkspaceIDs: Set<UUID> = []
     /// The Workspace that was most recently key.
     private(set) var lastActiveWorkspaceID: UUID?
-    /// Set while a Workspace is full screen: the Navigator is docked in it.
-    var dockedInWorkspaceID: UUID?
     weak var navigatorWindow: NSWindow?
 
     init() {}
 
     func workspace(_ id: UUID) -> WorkspaceModel {
         if let model = workspaces[id] { return model }
-        let model = WorkspaceModel(id: id)
+        let model = WorkspaceModel(id: id, split: settings.workspaceSplit)
         if closedWorkspaceIDs.contains(id) {
             model.isClosed = true
         } else {
@@ -107,6 +153,32 @@ final class AppState {
         workspaces[id] = nil
         if lastActiveWorkspaceID == id {
             lastActiveWorkspaceID = workspaces.values.first { !$0.isClosed && $0.window != nil }?.id
+        }
+    }
+
+    // MARK: Docked Navigator
+
+    /// Whether the Workspace shows the Navigator as a sidebar: in full
+    /// screen, or always with the Dock Navigator setting.
+    func docksNavigator(in workspace: WorkspaceModel) -> Bool {
+        workspace.isFullScreen || settings.docksNavigator
+    }
+
+    /// Whether a Workspace window on screen has the Navigator docked, so
+    /// the Navigator window should be hidden.
+    var navigatorIsDocked: Bool {
+        workspaces.values.contains { !$0.isClosed && $0.window != nil && docksNavigator(in: $0) }
+    }
+
+    /// Hides the Navigator window while it is docked in a Workspace, and
+    /// shows it (opening it again if it was closed) when it is not.
+    func updateNavigatorWindow(openWindow: OpenWindowAction?) {
+        if navigatorIsDocked {
+            navigatorWindow?.orderOut(nil)
+        } else if let navigatorWindow {
+            if !navigatorWindow.isVisible { navigatorWindow.orderFront(nil) }
+        } else {
+            openWindow?(id: WindowID.navigator)
         }
     }
 
@@ -139,7 +211,7 @@ final class AppState {
         session?.close()
         searchPanel?.close()
         searchModel = nil
-        let session = ProjectSession(rootDir: rootDir, goBinary: settings.goBinary)
+        let session = ProjectSession(rootDir: rootDir, goBinary: settings.goBinary, target: settings.buildTarget(for: rootDir))
         self.session = session
         settings.addRecentProject(rootDir)
         for workspace in workspaces.values { workspace.reset() }
@@ -157,6 +229,16 @@ final class AppState {
             // The pick did not work; do not keep it.
             settings.goBinary = nil
         }
+    }
+
+    /// Loads the open project again with other build tags or another
+    /// platform, and remembers them for the project. Workspaces keep their
+    /// places and reload what they show.
+    func setBuildTarget(_ target: BuildTarget, openWindow: OpenWindowAction?) async {
+        guard let session, target != session.target else { return }
+        settings.setBuildTarget(target, for: session.rootDir)
+        await session.reopen(target: target)
+        await showFirstPackage(of: session, openWindow: openWindow)
     }
 
     private func showFirstPackage(of session: ProjectSession, openWindow: OpenWindowAction?) async {

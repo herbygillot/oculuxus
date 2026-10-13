@@ -1188,7 +1188,11 @@ type OpenProjectRequest struct {
 	// uses the `go` on its PATH.
 	GoBinary string `protobuf:"bytes,2,opt,name=go_binary,json=goBinary,proto3" json:"go_binary,omitempty"`
 	// Optional build tags, as for `go build -tags`.
-	BuildTags     []string `protobuf:"bytes,3,rep,name=build_tags,json=buildTags,proto3" json:"build_tags,omitempty"`
+	BuildTags []string `protobuf:"bytes,3,rep,name=build_tags,json=buildTags,proto3" json:"build_tags,omitempty"`
+	// Optional target platform, as GOOS and GOARCH. Empty means the host's
+	// (or whatever the environment sets).
+	Goos          string `protobuf:"bytes,4,opt,name=goos,proto3" json:"goos,omitempty"`
+	Goarch        string `protobuf:"bytes,5,opt,name=goarch,proto3" json:"goarch,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1242,6 +1246,20 @@ func (x *OpenProjectRequest) GetBuildTags() []string {
 		return x.BuildTags
 	}
 	return nil
+}
+
+func (x *OpenProjectRequest) GetGoos() string {
+	if x != nil {
+		return x.Goos
+	}
+	return ""
+}
+
+func (x *OpenProjectRequest) GetGoarch() string {
+	if x != nil {
+		return x.Goarch
+	}
+	return ""
 }
 
 type OpenProjectResponse struct {
@@ -3275,12 +3293,14 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\x0ehelper_version\x18\x02 \x01(\tR\rhelperVersion\x12\x1d\n" +
 	"\n" +
 	"go_version\x18\x03 \x01(\tR\tgoVersion\x12\x16\n" +
-	"\x06goroot\x18\x04 \x01(\tR\x06goroot\"k\n" +
+	"\x06goroot\x18\x04 \x01(\tR\x06goroot\"\x97\x01\n" +
 	"\x12OpenProjectRequest\x12\x19\n" +
 	"\broot_dir\x18\x01 \x01(\tR\arootDir\x12\x1b\n" +
 	"\tgo_binary\x18\x02 \x01(\tR\bgoBinary\x12\x1d\n" +
 	"\n" +
-	"build_tags\x18\x03 \x03(\tR\tbuildTags\"E\n" +
+	"build_tags\x18\x03 \x03(\tR\tbuildTags\x12\x12\n" +
+	"\x04goos\x18\x04 \x01(\tR\x04goos\x12\x16\n" +
+	"\x06goarch\x18\x05 \x01(\tR\x06goarch\"E\n" +
 	"\x13OpenProjectResponse\x12.\n" +
 	"\aproject\x18\x01 \x01(\v2\x14.oculuxus.v1.ProjectR\aproject\"\xb1\x01\n" +
 	"\aProject\x12\x19\n" +

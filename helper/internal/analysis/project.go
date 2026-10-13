@@ -108,8 +108,16 @@ func runOutput(ctx context.Context, env []string, name string, args ...string) (
 	return string(out), nil
 }
 
+// Target is the build configuration a project is loaded for. The zero
+// value uses no tags and the host platform.
+type Target struct {
+	BuildTags []string
+	GOOS      string
+	GOARCH    string
+}
+
 // Open locates go.work or go.mod under root and lists the project's modules.
-func Open(ctx context.Context, tc *Toolchain, root string, buildTags []string) (*Project, error) {
+func Open(ctx context.Context, tc *Toolchain, root string, target Target) (*Project, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, &Error{Code: pb.Error_INVALID_REQUEST, Err: err}
@@ -132,8 +140,14 @@ func Open(ctx context.Context, tc *Toolchain, root string, buildTags []string) (
 		typed:     map[string]*typedPackage{},
 		inflight:  map[string]*sync.WaitGroup{},
 	}
-	if len(buildTags) > 0 {
-		p.buildFlags = []string{"-tags=" + strings.Join(buildTags, ",")}
+	if len(target.BuildTags) > 0 {
+		p.buildFlags = []string{"-tags=" + strings.Join(target.BuildTags, ",")}
+	}
+	if target.GOOS != "" {
+		p.env = append(withoutKey(p.env, "GOOS"), "GOOS="+target.GOOS)
+	}
+	if target.GOARCH != "" {
+		p.env = append(withoutKey(p.env, "GOARCH"), "GOARCH="+target.GOARCH)
 	}
 	switch {
 	case fileExists(filepath.Join(abs, "go.work")):
@@ -168,7 +182,7 @@ func Open(ctx context.Context, tc *Toolchain, root string, buildTags []string) (
 	if len(p.modules) == 0 {
 		return nil, &Error{Code: pb.Error_LOAD_FAILED, Err: errors.New("go list -m found no modules")}
 	}
-	p.index = newSymbolIndex(indexCachePath(abs), tc.GoVersion+" "+strings.Join(p.buildFlags, " "))
+	p.index = newSymbolIndex(indexCachePath(abs), strings.Join([]string{tc.GoVersion, target.GOOS, target.GOARCH, strings.Join(p.buildFlags, " ")}, " "))
 	return p, nil
 }
 

@@ -195,7 +195,11 @@ func (h *Handler) handle(ctx context.Context, req *pb.Request, progress func(str
 			return nil, err
 		}
 		progress("Reading modules")
-		p, err := analysis.Open(ctx, tc, r.OpenProject.RootDir, r.OpenProject.BuildTags)
+		p, err := analysis.Open(ctx, tc, r.OpenProject.RootDir, analysis.Target{
+			BuildTags: r.OpenProject.BuildTags,
+			GOOS:      r.OpenProject.Goos,
+			GOARCH:    r.OpenProject.Goarch,
+		})
 		if err != nil {
 			return nil, err
 		}

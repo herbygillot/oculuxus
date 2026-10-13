@@ -19,12 +19,17 @@ final class ProjectSession {
 
     let rootDir: String
     private(set) var goBinary: String?
+    /// The build tags and platform the project is loaded for.
+    private(set) var target: BuildTarget
     private(set) var status: Status = .opening("Starting")
     private(set) var project: OcxProject?
     private(set) var listing = PackageListing()
     /// Bumped for a package each time files change under it; views showing
     /// the package load it again when its revision changes.
     private(set) var revisions: [String: Int] = [:]
+    /// Bumped when the whole project is loaded again (for another target),
+    /// which changes every package's revision.
+    private(set) var generation = 0
 
     @ObservationIgnored private var client: HelperClient?
     @ObservationIgnored private var connecting: Task<HelperClient, Error>?
@@ -53,9 +58,10 @@ final class ProjectSession {
         var tests: Bool
     }
 
-    init(rootDir: String, goBinary: String?) {
+    init(rootDir: String, goBinary: String?, target: BuildTarget = BuildTarget()) {
         self.rootDir = rootDir
         self.goBinary = goBinary
+        self.target = target
     }
 
     var name: String { (rootDir as NSString).lastPathComponent }
@@ -82,6 +88,17 @@ final class ProjectSession {
         } catch {
             status = .failed(error.localizedDescription)
         }
+    }
+
+    /// Loads the project again for another target in a new helper: the
+    /// package list, outlines, sources and symbol index all follow it.
+    func reopen(target: BuildTarget) async {
+        self.target = target
+        outlines.invalidate { _ in true }
+        declarationSources.invalidate { _ in true }
+        fileSources.invalidate { _ in true }
+        generation += 1
+        await open()
     }
 
     private func progress(_ message: String) {
@@ -117,6 +134,9 @@ final class ProjectSession {
         var request = OcxOpenProjectRequest()
         request.rootDir = rootDir
         request.goBinary = goBinary ?? located ?? ""
+        request.buildTags = target.tags
+        request.goos = target.goos
+        request.goarch = target.goarch
         project = try await client.openProject(request) { [weak self] message in
             Task { @MainActor in self?.progress(message) }
         }
@@ -144,7 +164,7 @@ final class ProjectSession {
     }
 
     func revision(of packageID: String) -> Int {
-        revisions[packageID] ?? 0
+        (revisions[packageID] ?? 0) + generation
     }
 
     /// Tells the helper which files changed, drops what is cached for the

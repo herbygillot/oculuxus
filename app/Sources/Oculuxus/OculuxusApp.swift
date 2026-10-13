@@ -109,6 +109,8 @@ struct ViewCommands: Commands {
                     .keyboardShortcut("2", modifiers: [.command, .control])
             }
             .pickerStyle(.inline)
+            Toggle("Dock Navigator in Workspace", isOn: $settings.docksNavigator)
+                .keyboardShortcut("0", modifiers: .command)
             Divider()
         }
     }
@@ -139,7 +141,8 @@ struct WindowAccessor: NSViewRepresentable {
 }
 
 /// The initial frames: the Navigator takes the left quarter of the screen
-/// and Workspaces the remaining three quarters.
+/// and Workspaces the remaining three quarters, or all of it when the
+/// Navigator is docked in them.
 enum WindowLayout {
     static let navigatorShare: CGFloat = 0.25
 
@@ -150,9 +153,10 @@ enum WindowLayout {
         return frame
     }
 
-    static func workspaceFrame(on screen: NSScreen?, cascade: Int) -> NSRect? {
+    /// With the Navigator `docked` in Workspaces they take the whole width.
+    static func workspaceFrame(on screen: NSScreen?, cascade: Int, docked: Bool = false) -> NSRect? {
         guard let visible = (screen ?? NSScreen.main)?.visibleFrame else { return nil }
-        let navigatorWidth = (visible.width * navigatorShare).rounded()
+        let navigatorWidth = docked ? 0 : (visible.width * navigatorShare).rounded()
         var frame = visible
         frame.origin.x += navigatorWidth
         frame.size.width -= navigatorWidth
