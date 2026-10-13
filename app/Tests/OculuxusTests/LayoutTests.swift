@@ -60,6 +60,70 @@ final class WorkspaceSplitTests: XCTestCase {
         ws.declarationClicked()
         XCTAssertEqual(ws.split.outlineShare, 0.25)
     }
+
+    func testDoubleClickWidensDraggedSplitOnce() async throws {
+        let ws = WorkspaceModel(id: UUID(), split: 0.5)
+        // Double-clicking the source viewer, as when selecting a word.
+        ws.paneClicked(.source, .down, clicks: 1)
+        XCTAssertEqual(ws.split.outlineShare, 0.5)
+        ws.paneClicked(.source, .down, clicks: 2)
+        XCTAssertEqual(ws.split.outlineShare, 0.25)
+        XCTAssertFalse(ws.split.isAutomatic)
+
+        // Single clicks still do nothing after it.
+        ws.paneClicked(.outline, .down)
+        ws.paneClicked(.outline, .up)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(ws.split.outlineShare, 0.25)
+
+        // Double-clicking empty outline space widens the outline.
+        ws.paneClicked(.outline, .down, clicks: 1)
+        ws.paneClicked(.outline, .up, clicks: 1)
+        ws.paneClicked(.outline, .down, clicks: 2)
+        ws.paneClicked(.outline, .up, clicks: 2)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(ws.split.outlineShare, 0.75)
+
+        // Double-clicking a declaration row selects it: the source widens.
+        ws.paneClicked(.outline, .down, clicks: 1)
+        ws.paneClicked(.outline, .up, clicks: 1)
+        ws.declarationClicked()
+        XCTAssertEqual(ws.split.outlineShare, 0.75)
+        ws.paneClicked(.outline, .down, clicks: 2)
+        ws.paneClicked(.outline, .up, clicks: 2)
+        ws.declarationClicked()
+        try await Task.sleep(for: .milliseconds(800))
+        XCTAssertEqual(ws.split.outlineShare, 0.25)
+        XCTAssertFalse(ws.split.isAutomatic)
+
+        // A selection made without a double-click, such as a followed
+        // reference, does not move a dragged split.
+        ws.split.manualShare = 0.5
+        ws.declarationClicked()
+        XCTAssertEqual(ws.split.outlineShare, 0.5)
+    }
+
+    func testDoubleClickInAutomaticMode() async throws {
+        let ws = WorkspaceModel(id: UUID())
+        ws.paneClicked(.source, .down, clicks: 2)
+        XCTAssertTrue(ws.split.isAutomatic)
+        XCTAssertEqual(ws.split.outlineShare, 0.25)
+        ws.paneClicked(.outline, .down, clicks: 2)
+        ws.paneClicked(.outline, .up, clicks: 2)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertTrue(ws.split.isAutomatic)
+        XCTAssertEqual(ws.split.outlineShare, 0.75)
+    }
+
+    func testLayoutWiden() {
+        var split = WorkspaceSplitLayout(manualShare: 0.4)
+        split.widen(.source)
+        XCTAssertEqual(split.manualShare, 0.4)
+        split.widen(.source, doubleClick: true)
+        XCTAssertEqual(split.manualShare, 0.25)
+        split.widen(.outline, doubleClick: true)
+        XCTAssertEqual(split.manualShare, 0.75)
+    }
 }
 
 final class BuildTargetTests: XCTestCase {

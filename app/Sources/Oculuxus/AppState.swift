@@ -32,33 +32,40 @@ final class WorkspaceModel: Identifiable {
     /// widened the outline yet.
     @ObservationIgnored private var outlineClicks = 0
     @ObservationIgnored private var pendingOutlineClick: Int?
+    /// Whether that press was a double-click.
+    @ObservationIgnored private var pendingDoubleClick = false
 
     init(id: UUID, split: Double? = nil) {
         self.id = id
         self.split.manualShare = split
     }
 
-    /// Gives `pane` the wide share, animated, unless the user set the split.
-    func widen(_ pane: WorkspacePane) {
-        guard split.isAutomatic, split.widePane != pane else { return }
-        withAnimation(.easeInOut(duration: 0.25)) { split.widePane = pane }
+    /// Gives `pane` the wide share, animated. After a drag only a
+    /// double-click does, and the split stays manual.
+    func widen(_ pane: WorkspacePane, doubleClick: Bool = false) {
+        var next = split
+        next.widen(pane, doubleClick: doubleClick)
+        guard next != split else { return }
+        withAnimation(.easeInOut(duration: 0.25)) { split = next }
     }
 
-    /// A press in a pane. The source viewer widens at once. The outline
-    /// waits for the release: a press that selects a declaration widens the
-    /// source viewer instead (see `declarationClicked`). Releases lost to a
-    /// tracking loop (a scroller) are covered by a timeout.
-    func paneClicked(_ pane: WorkspacePane, _ phase: MousePhase) {
+    /// A press in a pane, with its click count. The source viewer widens at
+    /// once. The outline waits for the release: a press that selects a
+    /// declaration widens the source viewer instead (see
+    /// `declarationClicked`). Releases lost to a tracking loop (a scroller)
+    /// are covered by a timeout.
+    func paneClicked(_ pane: WorkspacePane, _ phase: MousePhase, clicks: Int = 1) {
         switch (pane, phase) {
         case (.source, .down):
             pendingOutlineClick = nil
-            widen(.source)
+            widen(.source, doubleClick: clicks >= 2)
         case (.source, .up):
             break
         case (.outline, .down):
             outlineClicks += 1
             let click = outlineClicks
             pendingOutlineClick = click
+            pendingDoubleClick = clicks >= 2
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.finishOutlineClick(click) }
         case (.outline, .up):
             guard let click = pendingOutlineClick else { return }
@@ -70,13 +77,14 @@ final class WorkspaceModel: Identifiable {
     func finishOutlineClick(_ click: Int) {
         guard pendingOutlineClick == click else { return }
         pendingOutlineClick = nil
-        widen(.outline)
+        widen(.outline, doubleClick: pendingDoubleClick)
     }
 
     /// A declaration was clicked in the outline: the user wants to read it.
     func declarationClicked() {
+        let doubleClick = pendingOutlineClick != nil && pendingDoubleClick
         pendingOutlineClick = nil
-        widen(.source)
+        widen(.source, doubleClick: doubleClick)
     }
 
     var location: WorkspaceLocation? {

@@ -10,7 +10,8 @@ enum WorkspacePane {
 /// How a Workspace divides its width between the package content pane and
 /// the source viewer. Automatically, the pane last clicked gets three
 /// quarters of the width. Once the user drags the divider, the split stays
-/// where they put it until they double-click the divider.
+/// where they put it until they double-click the divider; double-clicking
+/// a pane still gives it three quarters, but leaves the split manual.
 struct WorkspaceSplitLayout: Equatable {
     /// The share of the width the wide pane gets in automatic mode.
     static let wideShare = 0.75
@@ -25,6 +26,16 @@ struct WorkspaceSplitLayout: Equatable {
 
     var outlineShare: Double {
         manualShare ?? (widePane == .outline ? Self.wideShare : 1 - Self.wideShare)
+    }
+
+    /// Gives `pane` the wide share. A single click does nothing once the
+    /// split was dragged; a double-click moves the dragged split there.
+    mutating func widen(_ pane: WorkspacePane, doubleClick: Bool = false) {
+        if isAutomatic {
+            widePane = pane
+        } else if doubleClick {
+            manualShare = pane == .outline ? Self.wideShare : 1 - Self.wideShare
+        }
     }
 
     /// The outline's width in `width`, keeping both panes usable.
@@ -63,11 +74,11 @@ struct WorkspaceSplit<Outline: View, Source: View>: View {
             HStack(spacing: 0) {
                 outline
                     .frame(width: outlineWidth)
-                    .background(PaneClickMonitor(ignoring: .trailing) { phase in workspace.paneClicked(.outline, phase) })
+                    .background(PaneClickMonitor(ignoring: .trailing) { phase, clicks in workspace.paneClicked(.outline, phase, clicks: clicks) })
                 Divider()
                 source
                     .frame(maxWidth: .infinity)
-                    .background(PaneClickMonitor(ignoring: .leading) { phase in workspace.paneClicked(.source, phase) })
+                    .background(PaneClickMonitor(ignoring: .leading) { phase, clicks in workspace.paneClicked(.source, phase, clicks: clicks) })
             }
             .overlay(alignment: .leading) {
                 dividerHandle(width: width)
@@ -116,11 +127,12 @@ enum MousePhase {
 }
 
 /// Reports mouse-downs inside the view it backs, and the mouse-up that
-/// follows one, without taking the events from the views on top. Presses
-/// near the `ignoring` edge are left to the divider.
+/// follows one, with the click count of the press, without taking the
+/// events from the views on top. Presses near the `ignoring` edge are left
+/// to the divider.
 struct PaneClickMonitor: NSViewRepresentable {
     var ignoring: HorizontalEdge
-    var onMouse: (MousePhase) -> Void
+    var onMouse: (MousePhase, Int) -> Void
 
     func makeNSView(context: Context) -> MonitorView {
         let view = MonitorView()
@@ -135,7 +147,7 @@ struct PaneClickMonitor: NSViewRepresentable {
 
     final class MonitorView: NSView {
         var ignoring: HorizontalEdge = .trailing
-        var onMouse: ((MousePhase) -> Void)?
+        var onMouse: ((MousePhase, Int) -> Void)?
         private var monitor: Any?
         private var pressed = false
 
@@ -161,9 +173,9 @@ struct PaneClickMonitor: NSViewRepresentable {
                 area.size.width -= 5
                 if ignoring == .leading { area.origin.x += 5 }
                 pressed = area.contains(point)
-                if pressed { onMouse?(.down) }
+                if pressed { onMouse?(.down, event.clickCount) }
             case .leftMouseUp:
-                if pressed { onMouse?(.up) }
+                if pressed { onMouse?(.up, event.clickCount) }
                 pressed = false
             default:
                 break
