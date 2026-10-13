@@ -219,10 +219,15 @@ private struct PackagePanes: View {
                         },
                         openReference: { location, newWindow in
                             // A declaration clicked by name is for reading too.
-                            if location.declarationID != nil, !newWindow { workspace.declarationClicked() }
+                            if location.declarationID != nil, !newWindow {
+                                workspace.declarationClicked()
+                            } else {
+                                workspace.targetClicked()
+                            }
                             open(location, newWindow)
                         },
-                        openInEditor: { EditorLauncher.open($0, settings: settings) }
+                        openInEditor: { EditorLauncher.open($0, settings: settings) },
+                        targetClicked: workspace.targetClicked
                     )
                 }
             }
@@ -305,8 +310,12 @@ private struct SourcePane: View {
                     theme: settings.theme,
                     font: settings.font,
                     firstLine: shown.map { EditorTarget(file: $0.file, line: max(Int($0.line), 1)) },
-                    openReference: open,
-                    openInEditor: { EditorLauncher.open($0, settings: settings) }
+                    openReference: { location, newWindow in
+                        workspace.targetClicked()
+                        open(location, newWindow)
+                    },
+                    openInEditor: { EditorLauncher.open($0, settings: settings) },
+                    linkDoubleClicked: workspace.targetClicked
                 )
             }
         }

@@ -11,6 +11,8 @@ struct PackageContentView: View {
     var select: (String) -> Void
     var openReference: (WorkspaceLocation, Bool) -> Void
     var openInEditor: (EditorTarget) -> Void
+    /// A clickable target other than a declaration row was clicked.
+    var targetClicked: () -> Void = {}
 
     /// Section order: vars, consts, interfaces, structs, funcs, other types.
     private static let sections: [(String, OcxSymbolKind)] = [
@@ -77,7 +79,7 @@ struct PackageContentView: View {
     }
 
     private var rowContext: DeclarationView.Context {
-        .init(selectedID: selectedID, theme: theme, font: font, select: select, openInEditor: openInEditor)
+        .init(selectedID: selectedID, theme: theme, font: font, select: select, openInEditor: openInEditor, targetClicked: targetClicked)
     }
 
     private var header: some View {
@@ -146,6 +148,7 @@ struct DeclarationView: View {
         var font: NSFont
         var select: (String) -> Void
         var openInEditor: (EditorTarget) -> Void
+        var targetClicked: () -> Void
     }
 
     var declaration: OcxDeclaration
@@ -172,6 +175,8 @@ struct DeclarationView: View {
                 }
                 .padding(.leading, CGFloat(depth + 1) * 16 + 12)
                 .padding(.trailing, 12)
+                // The label or the disclosure triangle was clicked.
+                .onChange(of: membersExpanded) { context.targetClicked() }
                 .onChange(of: context.selectedID, initial: true) { _, id in
                     // Show a field or interface member that was navigated to.
                     if let id, collapsible.contains(where: { $0.id == id }) { membersExpanded = true }

@@ -10,8 +10,10 @@ enum WorkspacePane {
 /// How a Workspace divides its width between the package content pane and
 /// the source viewer. Automatically, the pane last clicked gets three
 /// quarters of the width. Once the user drags the divider, the split stays
-/// where they put it until they double-click the divider; double-clicking
-/// a pane still gives it three quarters, but leaves the split manual.
+/// where they put it until they double-click the divider, or double-click a
+/// pane anywhere but a clickable target, which gives that pane three
+/// quarters again. Double-clicking a declaration row widens the source
+/// viewer and leaves a dragged split manual.
 struct WorkspaceSplitLayout: Equatable {
     /// The share of the width the wide pane gets in automatic mode.
     static let wideShare = 0.75
@@ -84,6 +86,10 @@ struct WorkspaceSplit<Outline: View, Source: View>: View {
                 dividerHandle(width: width)
                     .offset(x: outlineWidth - 3)
             }
+        }
+        .onChange(of: workspace.split.isAutomatic) { _, automatic in
+            // Back to automatic sizing: new Workspaces size automatically too.
+            if automatic { settings.workspaceSplit = nil }
         }
     }
 

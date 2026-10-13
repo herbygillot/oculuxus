@@ -28,12 +28,17 @@ final class WorkspaceModel: Identifiable {
     var isClosed = false
     /// How the panes share the width.
     var split = WorkspaceSplitLayout()
-    /// Counts outline presses; `pendingOutlineClick` is the one that has not
-    /// widened the outline yet.
-    @ObservationIgnored private var outlineClicks = 0
-    @ObservationIgnored private var pendingOutlineClick: Int?
-    /// Whether that press was a double-click.
-    @ObservationIgnored private var pendingDoubleClick = false
+    /// A press that has not resized the panes yet: an outline click, or a
+    /// double-click in either pane, which waits until clickable targets
+    /// under it have had their say.
+    private struct PendingClick {
+        var id: Int
+        var pane: WorkspacePane
+        var double: Bool
+    }
+
+    @ObservationIgnored private var clicks = 0
+    @ObservationIgnored private var pending: PendingClick?
 
     init(id: UUID, split: Double? = nil) {
         self.id = id
@@ -49,42 +54,64 @@ final class WorkspaceModel: Identifiable {
         withAnimation(.easeInOut(duration: 0.25)) { split = next }
     }
 
-    /// A press in a pane, with its click count. The source viewer widens at
-    /// once. The outline waits for the release: a press that selects a
-    /// declaration widens the source viewer instead (see
-    /// `declarationClicked`). Releases lost to a tracking loop (a scroller)
-    /// are covered by a timeout.
-    func paneClicked(_ pane: WorkspacePane, _ phase: MousePhase, clicks: Int = 1) {
-        switch (pane, phase) {
-        case (.source, .down):
-            pendingOutlineClick = nil
-            widen(.source, doubleClick: clicks >= 2)
-        case (.source, .up):
-            break
-        case (.outline, .down):
-            outlineClicks += 1
-            let click = outlineClicks
-            pendingOutlineClick = click
-            pendingDoubleClick = clicks >= 2
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.finishOutlineClick(click) }
-        case (.outline, .up):
-            guard let click = pendingOutlineClick else { return }
-            // After SwiftUI has handled the release, which may select.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.finishOutlineClick(click) }
+    /// A press in a pane, with its click count. A single click in the
+    /// source viewer widens it at once. Everything else waits for the
+    /// release, so that a press on a declaration row (`declarationClicked`)
+    /// or another clickable target (`targetClicked`) can claim it. Releases
+    /// lost to a tracking loop (a scroller) are covered by a timeout.
+    func paneClicked(_ pane: WorkspacePane, _ phase: MousePhase, clicks count: Int = 1) {
+        switch phase {
+        case .down:
+            pending = nil
+            if pane == .source, count < 2 {
+                widen(.source)
+                return
+            }
+            clicks += 1
+            let click = PendingClick(id: clicks, pane: pane, double: count >= 2)
+            pending = click
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.finishClick(click.id) }
+        case .up:
+            guard let click = pending, click.pane == pane else { return }
+            // After the views have handled the release, which may select.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.finishClick(click.id) }
         }
     }
 
-    func finishOutlineClick(_ click: Int) {
-        guard pendingOutlineClick == click else { return }
-        pendingOutlineClick = nil
-        widen(.outline, doubleClick: pendingDoubleClick)
+    func finishClick(_ id: Int) {
+        guard let click = pending, click.id == id else { return }
+        pending = nil
+        if click.double {
+            paneDoubleClicked(click.pane)
+        } else {
+            widen(click.pane)
+        }
+    }
+
+    /// A double-click on a pane that no clickable target claimed: that pane
+    /// gets the wide share, and a dragged split goes back to automatic
+    /// sizing, as when the divider is double-clicked.
+    func paneDoubleClicked(_ pane: WorkspacePane) {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            split.manualShare = nil
+            split.widePane = pane
+        }
     }
 
     /// A declaration was clicked in the outline: the user wants to read it.
+    /// A double-click on its row widens the source viewer even over a
+    /// dragged split, which stays manual.
     func declarationClicked() {
-        let doubleClick = pendingOutlineClick != nil && pendingDoubleClick
-        pendingOutlineClick = nil
+        let doubleClick = pending?.double == true && pending?.pane == .outline
+        pending = nil
         widen(.source, doubleClick: doubleClick)
+    }
+
+    /// A clickable target (a link, a disclosure toggle, a button) handled
+    /// the click: a double-click on it leaves the panes alone. A single
+    /// click still widens its pane.
+    func targetClicked() {
+        if pending?.double == true { pending = nil }
     }
 
     var location: WorkspaceLocation? {

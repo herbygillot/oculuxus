@@ -16,6 +16,8 @@ struct SourceView: NSViewRepresentable {
     /// Called when a reference is clicked; the flag is true for Command-click.
     var openReference: (WorkspaceLocation, Bool) -> Void
     var openInEditor: (EditorTarget) -> Void
+    /// Called when a reference is double-clicked, which selects it.
+    var linkDoubleClicked: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -52,6 +54,7 @@ struct SourceView: NSViewRepresentable {
         if let textView = textView as? SourceTextView {
             textView.firstLine = firstLine
             textView.openInEditor = openInEditor
+            textView.linkDoubleClicked = linkDoubleClicked
         }
 
         let key = Coordinator.ContentKey(file: file, theme: theme.id, font: font)
@@ -117,6 +120,25 @@ struct SourceView: NSViewRepresentable {
 final class SourceTextView: NSTextView {
     var firstLine: EditorTarget?
     var openInEditor: ((EditorTarget) -> Void)?
+    var linkDoubleClicked: (() -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount >= 2, isOnLink(event) { linkDoubleClicked?() }
+        super.mouseDown(with: event)
+    }
+
+    /// Whether the press is on a character of a reference.
+    private func isOnLink(_ event: NSEvent) -> Bool {
+        guard let storage = textStorage, let window else { return false }
+        let point = window.convertPoint(toScreen: event.locationInWindow)
+        let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+        // The insertion point is on either side of the character pressed.
+        for i in [index - 1, index] where i >= 0 && i < storage.length {
+            guard storage.attribute(.link, at: i, effectiveRange: nil) != nil else { continue }
+            if firstRect(forCharacterRange: NSRange(location: i, length: 1), actualRange: nil).contains(point) { return true }
+        }
+        return false
+    }
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
