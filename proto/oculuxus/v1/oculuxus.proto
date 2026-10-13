@@ -124,6 +124,10 @@ message OpenProjectRequest {
   string go_binary = 2;
   // Optional build tags, as for `go build -tags`.
   repeated string build_tags = 3;
+  // Optional target platform, as GOOS and GOARCH. Empty means the host's
+  // (or whatever the environment sets).
+  string goos = 4;
+  string goarch = 5;
 }
 
 message OpenProjectResponse {

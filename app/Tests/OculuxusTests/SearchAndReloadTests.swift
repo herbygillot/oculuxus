@@ -184,6 +184,29 @@ final class LiveReloadTests: XCTestCase {
         XCTAssertTrue(model.matches.isEmpty)
     }
 
+    func testReopenForTarget() async throws {
+        try Data("package shapes\n\nfunc OnWindows() {}\n".utf8).write(to: project.appending(path: "shapes/only_windows.go"))
+        try Data("//go:build extra\n\npackage shapes\n\nfunc Tagged() {}\n".utf8).write(to: project.appending(path: "shapes/tagged.go"))
+        // Let the watcher's reload of the new files settle first.
+        try await Task.sleep(for: .seconds(1))
+        let before = try await session.outline(shapes)
+        XCTAssertFalse(before.declarations.contains { $0.id == "OnWindows" || $0.id == "Tagged" })
+        let revision = session.revision(of: shapes)
+
+        await session.reopen(target: BuildTarget(tags: ["extra"], goos: "windows", goarch: "amd64"))
+        XCTAssertEqual(session.status, .ready)
+        XCTAssertGreaterThan(session.revision(of: shapes), revision)
+        let after = try await session.outline(shapes)
+        XCTAssertTrue(after.declarations.contains { $0.id == "OnWindows" })
+        XCTAssertTrue(after.declarations.contains { $0.id == "Tagged" })
+        let search = try await session.search("Tagged", includeDependencies: false)
+        XCTAssertEqual(search.matches.first?.declarationID, "Tagged")
+
+        await session.reopen(target: BuildTarget())
+        let reset = try await session.outline(shapes)
+        XCTAssertFalse(reset.declarations.contains { $0.id == "Tagged" })
+    }
+
     func testJumpToSymbolOpensWorkspace() async throws {
         let state = AppState()
         await state.openProject(project.path, openWindow: nil)

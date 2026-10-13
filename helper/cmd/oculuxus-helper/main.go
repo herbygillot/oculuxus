@@ -38,6 +38,8 @@ func main() {
 	debug := fs.Bool("debug-json", false, "log every protocol message to stderr as JSON")
 	goBinary := fs.String("go", "", "Go binary to use instead of the one on PATH")
 	tags := fs.String("tags", "", "comma-separated build tags")
+	goos := fs.String("goos", "", "target GOOS instead of the host's")
+	goarch := fs.String("goarch", "", "target GOARCH instead of the host's")
 	tests := fs.Bool("tests", false, "include _test.go files in outline, source and file")
 	deps := fs.Bool("deps", false, "search dependencies and the standard library too")
 	fs.Usage = func() {
@@ -74,7 +76,7 @@ func main() {
 		buildTags = strings.Split(*tags, ",")
 	}
 	open := func(dir string) {
-		must(run(ctx, h, &pb.Request_OpenProject{OpenProject: &pb.OpenProjectRequest{RootDir: dir, GoBinary: *goBinary, BuildTags: buildTags}}, *debug))
+		must(run(ctx, h, &pb.Request_OpenProject{OpenProject: &pb.OpenProjectRequest{RootDir: dir, GoBinary: *goBinary, BuildTags: buildTags, Goos: *goos, Goarch: *goarch}}, *debug))
 	}
 	need := func(n int) {
 		if len(args) < n {

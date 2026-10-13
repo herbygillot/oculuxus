@@ -2,9 +2,11 @@ import AppKit
 import SwiftUI
 
 /// A Workspace window. Tracks which Workspace was last active, and docks
-/// the Navigator as a sidebar while the window is full screen.
+/// the Navigator as a sidebar while the window is full screen or when the
+/// Dock Navigator setting is on.
 struct WorkspaceWindow: View {
     @Environment(AppState.self) private var state
+    @Environment(\.openWindow) private var openWindow
     /// The Workspace this window shows, fixed when the window first
     /// appears. SwiftUI can later hand the window a value it saved in an
     /// earlier run (the app bundle restores the launch window's value after
@@ -20,7 +22,7 @@ struct WorkspaceWindow: View {
     var body: some View {
         let workspace = workspace
         Group {
-            if workspace.isFullScreen {
+            if state.docksNavigator(in: workspace) {
                 HSplitView {
                     NavigatorView()
                         .frame(minWidth: 200, idealWidth: 280, maxWidth: 480)
@@ -40,24 +42,29 @@ struct WorkspaceWindow: View {
             var observer: NSObjectProtocol?
             observer = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { _ in
                 MainActor.assumeIsolated {
-                    if workspace.isFullScreen { setDocked(false) }
+                    workspace.isFullScreen = false
                     state.workspaceClosed(workspace.id)
+                    state.updateNavigatorWindow(openWindow: openWindow)
                 }
                 if let observer { NotificationCenter.default.removeObserver(observer) }
             }
             let cascade = max(state.workspaces.count - 1, 0)
-            if let frame = WindowLayout.workspaceFrame(on: window.screen, cascade: cascade) {
+            if let frame = WindowLayout.workspaceFrame(on: window.screen, cascade: cascade, docked: state.settings.docksNavigator) {
                 window.setFrame(frame, display: true)
             }
+            state.updateNavigatorWindow(openWindow: openWindow)
         })
+        .onChange(of: state.settings.docksNavigator) {
+            state.updateNavigatorWindow(openWindow: openWindow)
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
             if isOwnWindow(note) { state.workspaceBecameActive(workspace.id) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willEnterFullScreenNotification)) { note in
-            if isOwnWindow(note) { setDocked(true) }
+            if isOwnWindow(note) { setFullScreen(true) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { note in
-            if isOwnWindow(note) { setDocked(false) }
+            if isOwnWindow(note) { setFullScreen(false) }
         }
     }
 
@@ -66,14 +73,9 @@ struct WorkspaceWindow: View {
         return note.object as? NSWindow === window
     }
 
-    private func setDocked(_ docked: Bool) {
-        workspace.isFullScreen = docked
-        state.dockedInWorkspaceID = docked ? workspace.id : nil
-        if docked {
-            state.navigatorWindow?.orderOut(nil)
-        } else {
-            state.navigatorWindow?.orderFront(nil)
-        }
+    private func setFullScreen(_ fullScreen: Bool) {
+        workspace.isFullScreen = fullScreen
+        state.updateNavigatorWindow(openWindow: openWindow)
     }
 }
 
@@ -94,7 +96,7 @@ struct WorkspaceView: View {
             }
         }
         .navigationTitle(title)
-        .navigationSubtitle(state.session?.name ?? "")
+        .navigationSubtitle(subtitle)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button { workspace.goBack() } label: { Image(systemName: "chevron.left") }
@@ -144,6 +146,12 @@ struct WorkspaceView: View {
         return state.session?.package(location.packageID)?.importPath ?? location.packageID
     }
 
+    /// The project, and its build target when not the default.
+    private var subtitle: String {
+        guard let session = state.session else { return "" }
+        return [session.name, session.target.summary].compactMap { $0 }.joined(separator: " · ")
+    }
+
     private func open(_ location: WorkspaceLocation, newWindow: Bool) {
         if newWindow {
             state.show(location, newWindow: true, openWindow: openWindow)
@@ -187,7 +195,7 @@ private struct PackagePanes: View {
 
     var body: some View {
         let settings = state.settings
-        HSplitView {
+        WorkspaceSplit(workspace: workspace, settings: settings) {
             Group {
                 switch outline {
                 case .loading:
@@ -205,14 +213,25 @@ private struct PackagePanes: View {
                         selectedID: location.declarationID,
                         theme: settings.theme,
                         font: settings.font,
-                        select: { workspace.select($0) },
-                        openReference: open,
-                        openInEditor: { EditorLauncher.open($0, settings: settings) }
+                        select: {
+                            workspace.select($0)
+                            workspace.declarationClicked()
+                        },
+                        openReference: { location, newWindow in
+                            // A declaration clicked by name is for reading too.
+                            if location.declarationID != nil, !newWindow {
+                                workspace.declarationClicked()
+                            } else {
+                                workspace.targetClicked()
+                            }
+                            open(location, newWindow)
+                        },
+                        openInEditor: { EditorLauncher.open($0, settings: settings) },
+                        targetClicked: workspace.targetClicked
                     )
                 }
             }
-            .frame(minWidth: 280, idealWidth: 460)
-
+        } source: {
             SourcePane(
                 session: session,
                 location: location,
@@ -222,7 +241,6 @@ private struct PackagePanes: View {
                 workspace: workspace,
                 open: open
             )
-            .frame(minWidth: 280)
         }
         .task(id: OutlineRequest(packageID: location.packageID, tests: tests, revision: session.revision(of: location.packageID))) {
             // Keep showing the current outline while the same package reloads.
@@ -292,8 +310,12 @@ private struct SourcePane: View {
                     theme: settings.theme,
                     font: settings.font,
                     firstLine: shown.map { EditorTarget(file: $0.file, line: max(Int($0.line), 1)) },
-                    openReference: open,
-                    openInEditor: { EditorLauncher.open($0, settings: settings) }
+                    openReference: { location, newWindow in
+                        workspace.targetClicked()
+                        open(location, newWindow)
+                    },
+                    openInEditor: { EditorLauncher.open($0, settings: settings) },
+                    linkDoubleClicked: workspace.targetClicked
                 )
             }
         }

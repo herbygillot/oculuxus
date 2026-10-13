@@ -40,6 +40,23 @@ their module, or as a flat list of full import paths. Switch with the control
 next to the project picker or View ▸ Packages as Tree / as List (⌃⌘1, ⌃⌘2);
 the choice is remembered.
 
+The Navigator floats in its own window, and docks as a sidebar in a
+Workspace in full screen. With View ▸ Dock Navigator in Workspace (⌘0, also
+in the Font, Colors, Go and Editor popover) every Workspace shows it as a
+sidebar and the Navigator window stays hidden while a Workspace is open.
+
+A Workspace gives three quarters of its width to the package content pane
+at first. Clicking a pane gives it the three quarters, animated; selecting a
+declaration (or clicking its name) widens the source viewer instead, to read
+it. Dragging the divider turns that off and keeps the split, which new
+Workspaces then use too; double-click the divider to go back.
+
+The chip button next to the project picker sets the project's build tags and
+target platform (the current one, linux/amd64, darwin/arm64, windows/amd64,
+or any GOOS/GOARCH). Applying reloads the project in a new helper: package
+list, outlines, sources and symbol index. The choice is remembered per
+project folder and shown in Workspace subtitles.
+
 The protocol types (`OcxRequest`, `OcxPackageOutline`, ...) are generated from
 `proto/oculuxus/v1/oculuxus.proto` at build time by the swift-protobuf SwiftPM
 plugin; `Sources/Oculuxus/swift-protobuf-config.json` points it at the schema.

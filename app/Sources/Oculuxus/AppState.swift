@@ -26,9 +26,92 @@ final class WorkspaceModel: Identifiable {
     /// Set once the window is closed. SwiftUI may still evaluate a closed
     /// window's content, so a closed model must never be shown in again.
     var isClosed = false
+    /// How the panes share the width.
+    var split = WorkspaceSplitLayout()
+    /// A press that has not resized the panes yet: an outline click, or a
+    /// double-click in either pane, which waits until clickable targets
+    /// under it have had their say.
+    private struct PendingClick {
+        var id: Int
+        var pane: WorkspacePane
+        var double: Bool
+    }
 
-    init(id: UUID) {
+    @ObservationIgnored private var clicks = 0
+    @ObservationIgnored private var pending: PendingClick?
+
+    init(id: UUID, split: Double? = nil) {
         self.id = id
+        self.split.manualShare = split
+    }
+
+    /// Gives `pane` the wide share, animated. After a drag only a
+    /// double-click does, and the split stays manual.
+    func widen(_ pane: WorkspacePane, doubleClick: Bool = false) {
+        var next = split
+        next.widen(pane, doubleClick: doubleClick)
+        guard next != split else { return }
+        withAnimation(.easeInOut(duration: 0.25)) { split = next }
+    }
+
+    /// A press in a pane, with its click count. A single click in the
+    /// source viewer widens it at once. Everything else waits for the
+    /// release, so that a press on a declaration row (`declarationClicked`)
+    /// or another clickable target (`targetClicked`) can claim it. Releases
+    /// lost to a tracking loop (a scroller) are covered by a timeout.
+    func paneClicked(_ pane: WorkspacePane, _ phase: MousePhase, clicks count: Int = 1) {
+        switch phase {
+        case .down:
+            pending = nil
+            if pane == .source, count < 2 {
+                widen(.source)
+                return
+            }
+            clicks += 1
+            let click = PendingClick(id: clicks, pane: pane, double: count >= 2)
+            pending = click
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.finishClick(click.id) }
+        case .up:
+            guard let click = pending, click.pane == pane else { return }
+            // After the views have handled the release, which may select.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.finishClick(click.id) }
+        }
+    }
+
+    func finishClick(_ id: Int) {
+        guard let click = pending, click.id == id else { return }
+        pending = nil
+        if click.double {
+            paneDoubleClicked(click.pane)
+        } else {
+            widen(click.pane)
+        }
+    }
+
+    /// A double-click on a pane that no clickable target claimed: that pane
+    /// gets the wide share, and a dragged split goes back to automatic
+    /// sizing, as when the divider is double-clicked.
+    func paneDoubleClicked(_ pane: WorkspacePane) {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            split.manualShare = nil
+            split.widePane = pane
+        }
+    }
+
+    /// A declaration was clicked in the outline: the user wants to read it.
+    /// A double-click on its row widens the source viewer even over a
+    /// dragged split, which stays manual.
+    func declarationClicked() {
+        let doubleClick = pending?.double == true && pending?.pane == .outline
+        pending = nil
+        widen(.source, doubleClick: doubleClick)
+    }
+
+    /// A clickable target (a link, a disclosure toggle, a button) handled
+    /// the click: a double-click on it leaves the panes alone. A single
+    /// click still widens its pane.
+    func targetClicked() {
+        if pending?.double == true { pending = nil }
     }
 
     var location: WorkspaceLocation? {
@@ -76,15 +159,13 @@ final class AppState {
     @ObservationIgnored private var closedWorkspaceIDs: Set<UUID> = []
     /// The Workspace that was most recently key.
     private(set) var lastActiveWorkspaceID: UUID?
-    /// Set while a Workspace is full screen: the Navigator is docked in it.
-    var dockedInWorkspaceID: UUID?
     weak var navigatorWindow: NSWindow?
 
     init() {}
 
     func workspace(_ id: UUID) -> WorkspaceModel {
         if let model = workspaces[id] { return model }
-        let model = WorkspaceModel(id: id)
+        let model = WorkspaceModel(id: id, split: settings.workspaceSplit)
         if closedWorkspaceIDs.contains(id) {
             model.isClosed = true
         } else {
@@ -107,6 +188,32 @@ final class AppState {
         workspaces[id] = nil
         if lastActiveWorkspaceID == id {
             lastActiveWorkspaceID = workspaces.values.first { !$0.isClosed && $0.window != nil }?.id
+        }
+    }
+
+    // MARK: Docked Navigator
+
+    /// Whether the Workspace shows the Navigator as a sidebar: in full
+    /// screen, or always with the Dock Navigator setting.
+    func docksNavigator(in workspace: WorkspaceModel) -> Bool {
+        workspace.isFullScreen || settings.docksNavigator
+    }
+
+    /// Whether a Workspace window on screen has the Navigator docked, so
+    /// the Navigator window should be hidden.
+    var navigatorIsDocked: Bool {
+        workspaces.values.contains { !$0.isClosed && $0.window != nil && docksNavigator(in: $0) }
+    }
+
+    /// Hides the Navigator window while it is docked in a Workspace, and
+    /// shows it (opening it again if it was closed) when it is not.
+    func updateNavigatorWindow(openWindow: OpenWindowAction?) {
+        if navigatorIsDocked {
+            navigatorWindow?.orderOut(nil)
+        } else if let navigatorWindow {
+            if !navigatorWindow.isVisible { navigatorWindow.orderFront(nil) }
+        } else {
+            openWindow?(id: WindowID.navigator)
         }
     }
 
@@ -139,7 +246,7 @@ final class AppState {
         session?.close()
         searchPanel?.close()
         searchModel = nil
-        let session = ProjectSession(rootDir: rootDir, goBinary: settings.goBinary)
+        let session = ProjectSession(rootDir: rootDir, goBinary: settings.goBinary, target: settings.buildTarget(for: rootDir))
         self.session = session
         settings.addRecentProject(rootDir)
         for workspace in workspaces.values { workspace.reset() }
@@ -157,6 +264,16 @@ final class AppState {
             // The pick did not work; do not keep it.
             settings.goBinary = nil
         }
+    }
+
+    /// Loads the open project again with other build tags or another
+    /// platform, and remembers them for the project. Workspaces keep their
+    /// places and reload what they show.
+    func setBuildTarget(_ target: BuildTarget, openWindow: OpenWindowAction?) async {
+        guard let session, target != session.target else { return }
+        settings.setBuildTarget(target, for: session.rootDir)
+        await session.reopen(target: target)
+        await showFirstPackage(of: session, openWindow: openWindow)
     }
 
     private func showFirstPackage(of session: ProjectSession, openWindow: OpenWindowAction?) async {

@@ -27,7 +27,8 @@ go build -o oculuxus-helper ./cmd/oculuxus-helper
 ```
 
 Each subcommand prints the protocol response as JSON. Flags: `-go PATH`
-picks a Go binary, `-tags a,b` sets build tags, `-tests` includes
+picks a Go binary, `-tags a,b` sets build tags, `-goos` and `-goarch`
+pick the target platform, `-tests` includes
 `_test.go` files in `outline`, `source` and `file`, `-debug-json` logs
 progress (and, in `serve` mode, every message, and for `search` its
 timings) to stderr.

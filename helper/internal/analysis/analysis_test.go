@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ func openTestProject(t *testing.T, dir string) *Project {
 	if err != nil {
 		t.Skipf("no Go toolchain: %v", err)
 	}
-	p, err := Open(ctx, tc, filepath.Join("testdata", dir), nil)
+	p, err := Open(ctx, tc, filepath.Join("testdata", dir), Target{})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -304,5 +305,44 @@ func TestReload(t *testing.T) {
 	resp = p.Reload([]string{gomod})
 	if !resp.PackageListChanged || p.list != nil {
 		t.Errorf("go.mod reload = %+v", resp)
+	}
+}
+
+func TestOpenTarget(t *testing.T) {
+	t.Setenv("OCULUXUS_CACHE_DIR", "off")
+	dir := copyProject(t, "simple")
+	write := func(name, src string) {
+		if err := os.WriteFile(filepath.Join(dir, "shapes", name), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("only_windows.go", "package shapes\n\nfunc OnWindows() {}\n")
+	write("tagged.go", "//go:build extra\n\npackage shapes\n\nfunc Tagged() {}\n")
+
+	ctx := context.Background()
+	tc, err := ResolveToolchain(ctx, "")
+	if err != nil {
+		t.Skipf("no Go toolchain: %v", err)
+	}
+	has := func(target Target) (windows, tagged bool) {
+		t.Helper()
+		p, err := Open(ctx, tc, dir, target)
+		if err != nil {
+			t.Fatalf("Open %+v: %v", target, err)
+		}
+		defer p.Close()
+		tp, err := p.Typed(ctx, "example.com/simple/shapes", false)
+		if err != nil {
+			t.Fatalf("Typed %+v: %v", target, err)
+		}
+		decls := tp.Outline().Declarations
+		return findDecl(decls, "OnWindows") != nil, findDecl(decls, "Tagged") != nil
+	}
+	host := Target{GOOS: "darwin", GOARCH: "arm64"}
+	if w, tg := has(host); w || tg {
+		t.Errorf("darwin/arm64 without tags: windows=%v tagged=%v", w, tg)
+	}
+	if w, tg := has(Target{GOOS: "windows", GOARCH: "amd64", BuildTags: []string{"extra"}}); !w || !tg {
+		t.Errorf("windows/amd64 with extra: windows=%v tagged=%v", w, tg)
 	}
 }

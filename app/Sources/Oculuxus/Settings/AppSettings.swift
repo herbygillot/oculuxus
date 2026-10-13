@@ -89,6 +89,15 @@ final class AppSettings {
     var customEditorCommand: String { didSet { save() } }
     /// What Automatic resolves to, once known: nil for the default app.
     private(set) var automaticEditor: EditorChoice??
+    /// Workspaces show the Navigator as a sidebar, not only in full screen,
+    /// and the Navigator window stays hidden while one is open.
+    var docksNavigator: Bool { didSet { save() } }
+    /// The outline's share of a new Workspace's width, from the last time
+    /// the user dragged the divider; nil to widen the pane clicked.
+    var workspaceSplit: Double? { didSet { save() } }
+    /// Build tags and target platform by project folder; projects with the
+    /// default target are left out.
+    private(set) var buildTargets: [String: BuildTarget] { didSet { save() } }
     /// Recently opened project folders, most recent first.
     private(set) var recentProjects: [String] { didSet { save() } }
 
@@ -105,6 +114,9 @@ final class AppSettings {
         navigatorLayout = defaults.string(forKey: "navigatorLayout").flatMap(NavigatorLayout.init(rawValue:)) ?? .tree
         editor = defaults.string(forKey: "editor").flatMap(EditorChoice.init(rawValue:)) ?? .automatic
         customEditorCommand = defaults.string(forKey: "customEditorCommand") ?? ""
+        docksNavigator = defaults.bool(forKey: "docksNavigator")
+        buildTargets = defaults.data(forKey: "buildTargets").flatMap { try? JSONDecoder().decode([String: BuildTarget].self, from: $0) } ?? [:]
+        workspaceSplit = defaults.object(forKey: "workspaceSplit") as? Double
         Task { [weak self] in
             // Off the main thread: it may read the login shell.
             let editor = await Task.detached { EditorResolver.system().automaticEditor() }.value
@@ -118,6 +130,14 @@ final class AppSettings {
 
     func removeRecentProject(_ rootDir: String) {
         recentProjects.removeAll { $0 == rootDir }
+    }
+
+    func buildTarget(for rootDir: String) -> BuildTarget {
+        buildTargets[rootDir] ?? BuildTarget()
+    }
+
+    func setBuildTarget(_ target: BuildTarget, for rootDir: String) {
+        buildTargets[rootDir] = target.isDefault ? nil : target
     }
 
     var theme: CodeTheme {
@@ -143,6 +163,9 @@ final class AppSettings {
         defaults.set(navigatorLayout.rawValue, forKey: "navigatorLayout")
         defaults.set(editor.rawValue, forKey: "editor")
         defaults.set(customEditorCommand, forKey: "customEditorCommand")
+        defaults.set(docksNavigator, forKey: "docksNavigator")
+        defaults.set(workspaceSplit, forKey: "workspaceSplit")
+        defaults.set(try? JSONEncoder().encode(buildTargets), forKey: "buildTargets")
     }
 }
 
@@ -185,6 +208,8 @@ struct SettingsPopover: View {
                     }
                 }
             }
+            Toggle("Dock Navigator in Workspace", isOn: $settings.docksNavigator)
+                .help("Show the Navigator as a sidebar in each Workspace instead of in its own window (⌘0)")
             Picker("Editor", selection: $settings.editor) {
                 ForEach(EditorChoice.allCases) { choice in
                     Text(choice == .automatic ? automaticName : choice.name).tag(choice)

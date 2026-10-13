@@ -33,6 +33,9 @@ struct NavigatorView: View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
                 ProjectPicker()
+                if let session = state.session {
+                    TargetButton(session: session)
+                }
                 LayoutPicker(settings: state.settings)
             }
             .padding(8)
@@ -126,6 +129,93 @@ private struct ProjectPicker: View {
             Label(state.session?.name ?? "Open Project", systemImage: "folder")
         }
         .help(state.session?.rootDir ?? "Open a Go project")
+    }
+}
+
+/// Shows the project's build target and changes it in a popover.
+private struct TargetButton: View {
+    @Environment(AppState.self) private var state
+    @Environment(\.openWindow) private var openWindow
+    var session: ProjectSession
+    @State private var editing = false
+
+    var body: some View {
+        Button { editing.toggle() } label: {
+            Image(systemName: session.target.isDefault ? "cpu" : "cpu.fill")
+        }
+        .buttonStyle(.borderless)
+        .help(session.target.summary.map { "Build target: \($0)" } ?? "Build tags and target platform")
+        .popover(isPresented: $editing, arrowEdge: .bottom) {
+            TargetEditor(target: session.target) { target in
+                editing = false
+                Task { await state.setBuildTarget(target, openWindow: openWindow) }
+            }
+        }
+    }
+}
+
+/// Edits build tags and GOOS/GOARCH. Apply reopens the project.
+struct TargetEditor: View {
+    private enum Choice: Hashable {
+        case current
+        case preset(BuildTarget.Platform)
+        case custom
+    }
+
+    let target: BuildTarget
+    var apply: (BuildTarget) -> Void
+    @State private var choice: Choice
+    @State private var goos: String
+    @State private var goarch: String
+    @State private var tags: String
+
+    init(target: BuildTarget, apply: @escaping (BuildTarget) -> Void) {
+        self.target = target
+        self.apply = apply
+        let platform = target.platform
+        _choice = State(initialValue: platform.map { BuildTarget.presets.contains($0) ? .preset($0) : .custom } ?? .current)
+        _goos = State(initialValue: target.goos)
+        _goarch = State(initialValue: target.goarch)
+        _tags = State(initialValue: target.tags.joined(separator: ","))
+    }
+
+    private var edited: BuildTarget {
+        var edited = BuildTarget(tags: BuildTarget.parseTags(tags))
+        switch choice {
+        case .current: edited.platform = nil
+        case let .preset(platform): edited.platform = platform
+        case .custom:
+            edited.goos = goos.trimmingCharacters(in: .whitespaces)
+            edited.goarch = goarch.trimmingCharacters(in: .whitespaces)
+        }
+        return edited
+    }
+
+    var body: some View {
+        Form {
+            Picker("Platform", selection: $choice) {
+                Text("Current").tag(Choice.current)
+                ForEach(BuildTarget.presets) { Text($0.id).tag(Choice.preset($0)) }
+                Text("Custom").tag(Choice.custom)
+            }
+            if choice == .custom {
+                TextField("GOOS", text: $goos, prompt: Text("linux"))
+                TextField("GOARCH", text: $goarch, prompt: Text("arm64"))
+            }
+            TextField("Build Tags", text: $tags, prompt: Text("integration,purego"))
+                .help("Separated by commas or spaces, as for go build -tags")
+            HStack {
+                Button("Reset") { apply(BuildTarget()) }
+                    .disabled(target.isDefault)
+                Spacer()
+                Button("Apply") { apply(edited) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(edited == target)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 300)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

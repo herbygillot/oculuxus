@@ -66,7 +66,7 @@ func openAt(t *testing.T, dir string) *Project {
 	if err != nil {
 		t.Skipf("no Go toolchain: %v", err)
 	}
-	p, err := Open(ctx, tc, dir, nil)
+	p, err := Open(ctx, tc, dir, Target{})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
