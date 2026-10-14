@@ -3514,7 +3514,10 @@ type ReferencesRequest struct {
 	IncludeDependencies bool   `protobuf:"varint,4,opt,name=include_dependencies,json=includeDependencies,proto3" json:"include_dependencies,omitempty"`
 	Wait                bool   `protobuf:"varint,5,opt,name=wait,proto3" json:"wait,omitempty"`
 	// At most this many references; 0 means 2000.
-	Limit         uint32 `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
+	Limit uint32 `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Resolve a position in a _test.go file: the package is type-checked
+	// with its tests. Only with `position`.
+	IncludeTests  bool `protobuf:"varint,7,opt,name=include_tests,json=includeTests,proto3" json:"include_tests,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3600,6 +3603,13 @@ func (x *ReferencesRequest) GetLimit() uint32 {
 		return x.Limit
 	}
 	return 0
+}
+
+func (x *ReferencesRequest) GetIncludeTests() bool {
+	if x != nil {
+		return x.IncludeTests
+	}
+	return false
 }
 
 type isReferencesRequest_At interface {
@@ -4838,7 +4848,7 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\x06column\x18\x06 \x01(\rR\x06column\"6\n" +
 	"\bPosition\x12\x12\n" +
 	"\x04file\x18\x01 \x01(\tR\x04file\x12\x16\n" +
-	"\x06offset\x18\x02 \x01(\rR\x06offset\"\xfc\x01\n" +
+	"\x06offset\x18\x02 \x01(\rR\x06offset\"\xa1\x02\n" +
 	"\x11ReferencesRequest\x120\n" +
 	"\x06symbol\x18\x01 \x01(\v2\x16.oculuxus.v1.SymbolRefH\x00R\x06symbol\x123\n" +
 	"\bposition\x18\x02 \x01(\v2\x15.oculuxus.v1.PositionH\x00R\bposition\x12\x1d\n" +
@@ -4846,7 +4856,8 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"package_id\x18\x03 \x01(\tR\tpackageId\x121\n" +
 	"\x14include_dependencies\x18\x04 \x01(\bR\x13includeDependencies\x12\x12\n" +
 	"\x04wait\x18\x05 \x01(\bR\x04wait\x12\x14\n" +
-	"\x05limit\x18\x06 \x01(\rR\x05limitB\x04\n" +
+	"\x05limit\x18\x06 \x01(\rR\x05limit\x12#\n" +
+	"\rinclude_tests\x18\a \x01(\bR\fincludeTestsB\x04\n" +
 	"\x02at\"\x80\x02\n" +
 	"\x12ReferencesResponse\x12.\n" +
 	"\x06symbol\x18\x01 \x01(\v2\x16.oculuxus.v1.SymbolRefR\x06symbol\x126\n" +

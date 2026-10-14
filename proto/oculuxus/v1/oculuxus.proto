@@ -521,6 +521,9 @@ message ReferencesRequest {
   bool wait = 5;
   // At most this many references; 0 means 2000.
   uint32 limit = 6;
+  // Resolve a position in a _test.go file: the package is type-checked
+  // with its tests. Only with `position`.
+  bool include_tests = 7;
 }
 
 message ReferencesResponse {
