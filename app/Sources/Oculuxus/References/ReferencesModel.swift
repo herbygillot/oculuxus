@@ -203,6 +203,9 @@ final class ReferencesModel {
         } else if let position = subject.position {
             request.position = position
             request.packageID = subject.packageID
+            // A position in a _test.go file only resolves once the package
+            // is type-checked with its tests.
+            request.includeTests = subject.tests || position.file.hasSuffix("_test.go")
         }
         request.includeDependencies = includeDependencies
         if !keepResults || references.isEmpty { status = .loading(nil) }

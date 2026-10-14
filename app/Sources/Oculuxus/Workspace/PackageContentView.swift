@@ -9,6 +9,7 @@ struct PackageContentView: View {
     var selectedID: String?
     var theme: CodeTheme
     var font: NSFont
+    var docDisplay: DocDisplay = .firstSentence
     var select: (String) -> Void
     var openReference: (WorkspaceLocation, Bool) -> Void
     var openInEditor: (EditorTarget) -> Void
@@ -83,7 +84,7 @@ struct PackageContentView: View {
     }
 
     private var rowContext: DeclarationView.Context {
-        .init(selectedID: selectedID, theme: theme, font: font, select: select, openInEditor: openInEditor, targetClicked: targetClicked, hoverCard: hoverCard, findReferences: findReferences)
+        .init(selectedID: selectedID, theme: theme, font: font, docDisplay: docDisplay, select: select, openInEditor: openInEditor, targetClicked: targetClicked, hoverCard: hoverCard, findReferences: findReferences)
     }
 
     private var header: some View {
@@ -150,6 +151,7 @@ struct DeclarationView: View {
         var selectedID: String?
         var theme: CodeTheme
         var font: NSFont
+        var docDisplay: DocDisplay
         var select: (String) -> Void
         var openInEditor: (EditorTarget) -> Void
         var targetClicked: () -> Void
@@ -223,36 +225,47 @@ private struct SignatureRow: View {
 
     var body: some View {
         let selected = context.selectedID == declaration.id
-        Text(signature)
-            .tint(Color(nsColor: context.theme.color(for: .typeName)))
-            .lineLimit(1)
-            .onContinuousHover(coordinateSpace: .local) { phase in
-                switch phase {
-                case let .active(point): pointer(at: point)
-                case .ended: endHover()
+        VStack(alignment: .leading, spacing: 2) {
+            Text(signature)
+                .tint(Color(nsColor: context.theme.color(for: .typeName)))
+                .lineLimit(1)
+                .onContinuousHover(coordinateSpace: .local) { phase in
+                    switch phase {
+                    case let .active(point): pointer(at: point)
+                    case .ended: endHover()
+                    }
                 }
+                .truncationMode(.tail)
+            if let doc = context.docDisplay.text(for: declaration.doc, selected: selected) {
+                Text(doc)
+                    .font(.system(size: max(context.font.pointSize - 1, 9)))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 2)
+                    .padding(.bottom, 3)
             }
-            .truncationMode(.tail)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 3)
-            .padding(.leading, CGFloat(depth) * 16 + 12)
-            .padding(.trailing, 12)
-            .background(selected ? Color.accentColor.opacity(0.18) : .clear)
-            .contentShape(Rectangle())
-            .onTapGesture { context.select(declaration.id) }
-            .contextMenu {
-                Button("Find References") { context.findReferences(declaration, .references) }
-                if declaration.kind == .func || declaration.kind == .method {
-                    Button("Find Callers") { context.findReferences(declaration, .callers) }
-                    Button("Find Callees") { context.findReferences(declaration, .callees) }
-                }
-                Divider()
-                Button("Open in Editor") {
-                    context.openInEditor(EditorTarget(file: declaration.location.file, line: max(Int(declaration.location.line), 1)))
-                }
-                .disabled(declaration.location.file.isEmpty)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 3)
+        .padding(.leading, CGFloat(depth) * 16 + 12)
+        .padding(.trailing, 12)
+        .background(selected ? Color.accentColor.opacity(0.18) : .clear)
+        .contentShape(Rectangle())
+        .onTapGesture { context.select(declaration.id) }
+        .contextMenu {
+            Button("Find References") { context.findReferences(declaration, .references) }
+            if declaration.kind == .func || declaration.kind == .method {
+                Button("Find Callers") { context.findReferences(declaration, .callers) }
+                Button("Find Callees") { context.findReferences(declaration, .callees) }
             }
-            .id(declaration.id)
+            Divider()
+            Button("Open in Editor") {
+                context.openInEditor(EditorTarget(file: declaration.location.file, line: max(Int(declaration.location.line), 1)))
+            }
+            .disabled(declaration.location.file.isEmpty)
+        }
+        .id(declaration.id)
     }
 
     /// Shows the hover card for the reference under the pointer. The card

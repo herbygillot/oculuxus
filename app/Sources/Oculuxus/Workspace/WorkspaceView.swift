@@ -218,6 +218,7 @@ private struct PackagePanes: View {
                         selectedID: location.declarationID,
                         theme: settings.theme,
                         font: settings.font,
+                        docDisplay: settings.docDisplay,
                         select: {
                             workspace.select($0)
                             workspace.declarationClicked()
