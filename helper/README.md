@@ -66,8 +66,9 @@ they resolve the way they would when building the project.
    callers or callees, and `Hover` for the card shown when the pointer
    rests on an identifier (by position in a file, or by declaration).
 
-Outline and source requests take `include_tests` to show code from
-`_test.go` files. The package's external test package (`package foo_test`)
+Outline, source and hover requests, and `References` by position, take
+`include_tests` to show or resolve code from `_test.go` files; the
+reference index itself does not cover test files. The package's external test package (`package foo_test`)
 then has its own id, `PackageOutline.external_test_package_id`.
 
 ## Symbol index

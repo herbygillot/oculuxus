@@ -70,7 +70,7 @@ func (p *Project) resolveTarget(ctx context.Context, req *pb.ReferencesRequest) 
 		if at.Position == nil || req.PackageId == "" {
 			return nil, nil, &Error{Code: pb.Error_INVALID_REQUEST, Err: fmt.Errorf("references: position needs a package id and file")}
 		}
-		tp, err := p.Typed(ctx, req.PackageId, false)
+		tp, err := p.Typed(ctx, req.PackageId, req.IncludeTests)
 		if err != nil {
 			return nil, nil, err
 		}

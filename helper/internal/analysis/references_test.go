@@ -141,6 +141,25 @@ func TestReferencesAtPosition(t *testing.T) {
 		t.Errorf("sum references:\n got %q (%+v)\nwant %q", got, resp, want)
 	}
 
+	// A local in a test file needs the package type-checked with tests.
+	testFile, testSrc := fixtureFile(t, "simple", "shapes", "shapes_test.go")
+	testReq := &pb.ReferencesRequest{
+		At:        &pb.ReferencesRequest_Position{Position: &pb.Position{File: testFile, Offset: uint32(strings.Index(testSrc, "c := testCircle"))}},
+		PackageId: shapesPkg,
+	}
+	if _, err := p.References(context.Background(), testReq, func(string) {}); err == nil {
+		t.Error("references in a test file without include_tests: want an error")
+	}
+	testReq.IncludeTests = true
+	resp, err = p.References(context.Background(), testReq, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = []string{"shapes:13:c in TestArea", "shapes:14:c in TestArea", "shapes:14:c in TestArea"}
+	if got := refLines(resp.References); strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("test-file local references:\n got %q\nwant %q", got, want)
+	}
+
 	// A position on a use of a declaration resolves to that declaration.
 	resp, err = p.References(context.Background(), &pb.ReferencesRequest{
 		At:        &pb.ReferencesRequest_Position{Position: &pb.Position{File: file, Offset: uint32(strings.Index(src, "Describe(w, Unit)"))}},
@@ -410,7 +429,20 @@ func TestHover(t *testing.T) {
 	}
 	// Locals and parameters have no declaration to navigate to.
 	check(hover(at("sum += ", 0)), "local variable", "var sum float64", "", "")
-	check(hover(at("w io.Writer", 0)), "parameter", "var w io.Writer", "", "")
+	h = hover(at("w io.Writer", 0))
+	check(h, "parameter", "var w io.Writer", "", "")
+	// The type in a local's signature is highlighted and linked.
+	var tokens []string
+	for _, tok := range h.Signature.Tokens {
+		s := h.Signature.Text[tok.Range.Start:tok.Range.End] + ":" + tok.Type.String()
+		if tok.Target != nil {
+			s += "->" + tok.Target.PackageId + "#" + tok.Target.DeclarationId
+		}
+		tokens = append(tokens, s)
+	}
+	if got, want := strings.Join(tokens, " "), "var:KEYWORD w:PARAMETER io:NAMESPACE->io# .:OPERATOR Writer:INTERFACE_NAME->io#Writer"; got != want {
+		t.Errorf("w signature tokens:\n got %s\nwant %s", got, want)
+	}
 	check(hover(at("float64 {", 0)), "builtin", "type float64", "", "")
 	// Nothing at whitespace or in a string.
 	if h := hover(at(" := 0.0", 0)); h != nil {
