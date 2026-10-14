@@ -43,6 +43,9 @@ message Request {
     FileSourceRequest file_source = 15;
     ReloadRequest reload = 16;
     SearchRequest search = 17;
+    ReferencesRequest references = 18;
+    CallHierarchyRequest call_hierarchy = 19;
+    HoverRequest hover = 20;
   }
 }
 
@@ -62,6 +65,9 @@ message Response {
     FileSourceResponse file_source = 15;
     ReloadResponse reload = 16;
     SearchResponse search = 17;
+    ReferencesResponse references = 18;
+    CallHierarchyResponse call_hierarchy = 19;
+    HoverResponse hover = 20;
   }
 }
 
@@ -301,6 +307,8 @@ message DeclarationSourceResponse {
   Text source = 1;
   // The file and line where `source` begins.
   Location location = 2;
+  // The byte offset of `source` in its file, for Hover positions.
+  uint32 file_offset = 3;
 }
 
 // Returns a whole file with highlight spans.
@@ -477,4 +485,208 @@ message IndexedSymbol {
   uint32 file = 4;
   uint32 line = 5;
   uint32 column = 6;
+}
+
+// ---------------------------------------------------------------------------
+// References, call hierarchy and hover
+// ---------------------------------------------------------------------------
+
+// A byte offset in a file, as delivered by FileSource, or by
+// DeclarationSource plus its file_offset.
+message Position {
+  string file = 1;
+  uint32 offset = 2;
+}
+
+// Finds every use of a declaration. The project's own packages are
+// type-checked in the background after they are indexed for search, and
+// their references are recorded in the index cache. Dependencies and the
+// standard library are type-checked only once a request asks for them.
+//
+// A request waits, sending Progress, until the project's packages are
+// indexed, unless `wait` is set, in which case it waits for everything in
+// scope. `complete` says whether the results cover the whole scope; the
+// app can ask again, with `wait`, for the rest.
+message ReferencesRequest {
+  oneof at {
+    // A declaration from an outline, a search result or a token target.
+    SymbolRef symbol = 1;
+    // An identifier in a file. A local variable or parameter has no
+    // declaration id; its uses within its package are found directly.
+    Position position = 2;
+  }
+  // The package the position's file belongs to. Only with `position`.
+  string package_id = 3;
+  bool include_dependencies = 4;
+  bool wait = 5;
+  // At most this many references; 0 means 2000.
+  uint32 limit = 6;
+}
+
+message ReferencesResponse {
+  // The declaration the references point to, resolved from the request.
+  SymbolRef symbol = 1;
+  // Grouped by package (the project's first), then file, then position.
+  repeated Reference references = 2;
+  // The number of references found, which exceeds len(references) when
+  // the limit cut the list.
+  uint32 total = 3;
+  bool complete = 4;
+  uint32 indexed_packages = 5;
+  uint32 total_packages = 6;
+}
+
+// One use of a declaration.
+message Reference {
+  string package_id = 1;
+  string package_name = 2;
+  PackageOrigin origin = 3;
+  Location location = 4;
+  // The source line the use is on, without leading whitespace.
+  string line_text = 5;
+  // The identifier within line_text.
+  Range range = 6;
+  // The identifier is called.
+  bool call = 7;
+  // The use goes through a method of an interface the declaration
+  // implements; `via` names that interface, such as "io.Reader".
+  bool via_interface = 8;
+  string via = 9;
+  // The declaration in package_id that contains the use: "Name" or
+  // "Type.Method" for a function body, the variable's id for an
+  // initializer. Empty for a package-level type.
+  string enclosing_id = 10;
+}
+
+// Lists one level of callers or callees of a function or method. Callers
+// come from the reference index, under the same waiting rules as
+// ReferencesRequest. Callees come from the function's own body, so they
+// never wait on the index.
+message CallHierarchyRequest {
+  SymbolRef symbol = 1;
+  enum Direction {
+    DIRECTION_UNSPECIFIED = 0;
+    CALLERS = 1;
+    CALLEES = 2;
+  }
+  Direction direction = 2;
+  // For callers: also look in dependencies and the standard library.
+  bool include_dependencies = 3;
+  bool wait = 4;
+}
+
+message CallHierarchyResponse {
+  repeated CallHierarchyItem items = 1;
+  // As in ReferencesResponse; always complete for callees.
+  bool complete = 2;
+  uint32 indexed_packages = 3;
+  uint32 total_packages = 4;
+}
+
+// A caller or callee, with the calls that connect it to the request's
+// function.
+message CallHierarchyItem {
+  // The function at the other end of the calls. Empty declaration_id for
+  // a callee without a navigable declaration, such as a local function
+  // value or a closure.
+  SymbolRef symbol = 1;
+  string package_name = 2;
+  PackageOrigin origin = 3;
+  SymbolKind kind = 4;
+  // The function on one line, such as "func (c Circle) Area() float64",
+  // or the called expression for a function value.
+  string signature = 5;
+  // Where the function is declared; absent without a declaration.
+  Location location = 6;
+  enum CallKind {
+    CALL_KIND_UNSPECIFIED = 0;
+    // A direct call of a function or method.
+    DIRECT = 1;
+    // A call through an interface method, whose implementation is not
+    // known statically; `via` names the interface.
+    VIA_INTERFACE = 2;
+    // A call of a function value: a variable, parameter, field or closure.
+    FUNCTION_VALUE = 3;
+  }
+  CallKind call_kind = 7;
+  string via = 8;
+  // The call sites, inside the caller (for CALLERS, each site's
+  // enclosing_id is this item's symbol) or inside the request's function.
+  repeated Reference sites = 9;
+}
+
+// Describes the identifier at a position, or a declaration, for a hover
+// card.
+message HoverRequest {
+  oneof at {
+    SymbolRef symbol = 1;
+    Position position = 2;
+  }
+  // The package the position's file belongs to. Only with `position`.
+  string package_id = 3;
+  bool include_tests = 4;
+}
+
+message HoverResponse {
+  // Absent when there is nothing to describe at the position.
+  Hover hover = 1;
+}
+
+message Hover {
+  // What the identifier is: "func", "method", "struct", "interface",
+  // "type", "const", "var", "field", "package", "parameter",
+  // "local variable", "type parameter", "builtin", "label".
+  string kind = 1;
+  string name = 2;
+  // The declaration on one line, highlighted and clickable.
+  Text signature = 3;
+  // The package that declares it; empty for builtins and locals.
+  string package_id = 4;
+  string package_name = 5;
+  // The doc comment, as plain text.
+  string doc = 6;
+  // Where it is declared.
+  Location location = 7;
+  // The declaration, when the app can navigate to it.
+  SymbolRef target = 8;
+}
+
+// ---------------------------------------------------------------------------
+// Reference index (on disk only)
+// ---------------------------------------------------------------------------
+
+// The references in one package, recorded from go/types once the package
+// is type-checked in the background. Kept in a separate cache file from
+// the symbols, and for dependencies only once they were asked for.
+message IndexedReferences {
+  string package_id = 1;
+  bytes fingerprint = 2;
+  repeated string files = 3;
+  // The packages referenced; IndexedReference.package indexes this.
+  repeated string packages = 4;
+  // The ids of the declarations that contain references, in this
+  // package; IndexedReference.enclosing indexes this (0 means none).
+  repeated string enclosing = 5;
+  repeated IndexedReference references = 6;
+}
+
+message IndexedReference {
+  uint32 package = 1;
+  string declaration_id = 2;
+  uint32 file = 3;
+  uint32 line = 4;
+  uint32 column = 5;
+  // The identifier's length in bytes.
+  uint32 length = 6;
+  bool call = 7;
+  // The declaration is a method of an interface.
+  bool interface_method = 8;
+  // 1-based index into IndexedReferences.enclosing; 0 for none.
+  uint32 enclosing = 9;
+}
+
+message ReferenceIndex {
+  uint32 format = 1;
+  string build = 2;
+  repeated IndexedReferences packages = 3;
 }

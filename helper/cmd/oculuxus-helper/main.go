@@ -10,11 +10,16 @@
 //	oculuxus-helper source DIR IMPORT_PATH DECL_ID
 //	oculuxus-helper file DIR IMPORT_PATH FILE
 //	oculuxus-helper search DIR QUERY
+//	oculuxus-helper refs DIR IMPORT_PATH DECL_ID
+//	oculuxus-helper callers DIR IMPORT_PATH DECL_ID
+//	oculuxus-helper callees DIR IMPORT_PATH DECL_ID
+//	oculuxus-helper hover DIR IMPORT_PATH FILE OFFSET
 //
 // DECL_ID is "Name" for a top-level declaration or "Type.Member" for a
 // method or field. -tests includes _test.go files in outlines and source;
-// search waits for the index and, with -deps, searches dependencies and
-// the standard library too.
+// search, refs and callers wait for the index and, with -deps, cover
+// dependencies and the standard library too. hover takes a byte offset
+// into FILE.
 package main
 
 import (
@@ -24,6 +29,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,7 +49,7 @@ func main() {
 	tests := fs.Bool("tests", false, "include _test.go files in outline, source and file")
 	deps := fs.Bool("deps", false, "search dependencies and the standard library too")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: oculuxus-helper [flags] [serve | info | packages DIR | outline DIR PKG | source DIR PKG DECL | file DIR PKG FILE | search DIR QUERY]")
+		fmt.Fprintln(os.Stderr, "usage: oculuxus-helper [flags] [serve | info | packages DIR | outline DIR PKG | source DIR PKG DECL | file DIR PKG FILE | search DIR QUERY | refs DIR PKG DECL | callers DIR PKG DECL | callees DIR PKG DECL | hover DIR PKG FILE OFFSET]")
 		fs.PrintDefaults()
 	}
 	fs.Parse(os.Args[1:])
@@ -115,6 +121,40 @@ func main() {
 			run(ctx, h, &pb.Request_Search{Search: &pb.SearchRequest{Query: args[1], IncludeDependencies: *deps}}, false)
 			fmt.Fprintf(os.Stderr, "… search again took %v\n", time.Since(start))
 		}
+	case "refs":
+		need(3)
+		open(args[0])
+		start := time.Now()
+		resp = run(ctx, h, &pb.Request_References{References: &pb.ReferencesRequest{
+			At:                  &pb.ReferencesRequest_Symbol{Symbol: &pb.SymbolRef{PackageId: args[1], DeclarationId: args[2]}},
+			IncludeDependencies: *deps, Wait: true,
+		}}, *debug)
+		if *debug {
+			fmt.Fprintf(os.Stderr, "… refs took %v (including indexing)\n", time.Since(start))
+		}
+	case "callers", "callees":
+		need(3)
+		open(args[0])
+		dir := pb.CallHierarchyRequest_CALLERS
+		if cmd == "callees" {
+			dir = pb.CallHierarchyRequest_CALLEES
+		}
+		resp = run(ctx, h, &pb.Request_CallHierarchy{CallHierarchy: &pb.CallHierarchyRequest{
+			Symbol: &pb.SymbolRef{PackageId: args[1], DeclarationId: args[2]}, Direction: dir,
+			IncludeDependencies: *deps, Wait: true,
+		}}, *debug)
+	case "hover":
+		need(4)
+		open(args[0])
+		offset, err := strconv.ParseUint(args[3], 10, 32)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "oculuxus-helper: OFFSET must be a number")
+			os.Exit(2)
+		}
+		resp = run(ctx, h, &pb.Request_Hover{Hover: &pb.HoverRequest{
+			PackageId: args[1], IncludeTests: *tests,
+			At: &pb.HoverRequest_Position{Position: &pb.Position{File: args[2], Offset: uint32(offset)}},
+		}}, *debug)
 	default:
 		fs.Usage()
 		os.Exit(2)
@@ -140,6 +180,12 @@ func run(ctx context.Context, h *server.Handler, body any, debug bool) *pb.Respo
 	case *pb.Request_FileSource:
 		req.Body = b
 	case *pb.Request_Search:
+		req.Body = b
+	case *pb.Request_References:
+		req.Body = b
+	case *pb.Request_CallHierarchy:
+		req.Body = b
+	case *pb.Request_Hover:
 		req.Body = b
 	}
 	progress := func(msg string) {

@@ -387,6 +387,111 @@ func (Error_Code) EnumDescriptor() ([]byte, []int) {
 	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{5, 0}
 }
 
+type CallHierarchyRequest_Direction int32
+
+const (
+	CallHierarchyRequest_DIRECTION_UNSPECIFIED CallHierarchyRequest_Direction = 0
+	CallHierarchyRequest_CALLERS               CallHierarchyRequest_Direction = 1
+	CallHierarchyRequest_CALLEES               CallHierarchyRequest_Direction = 2
+)
+
+// Enum value maps for CallHierarchyRequest_Direction.
+var (
+	CallHierarchyRequest_Direction_name = map[int32]string{
+		0: "DIRECTION_UNSPECIFIED",
+		1: "CALLERS",
+		2: "CALLEES",
+	}
+	CallHierarchyRequest_Direction_value = map[string]int32{
+		"DIRECTION_UNSPECIFIED": 0,
+		"CALLERS":               1,
+		"CALLEES":               2,
+	}
+)
+
+func (x CallHierarchyRequest_Direction) Enum() *CallHierarchyRequest_Direction {
+	p := new(CallHierarchyRequest_Direction)
+	*p = x
+	return p
+}
+
+func (x CallHierarchyRequest_Direction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CallHierarchyRequest_Direction) Descriptor() protoreflect.EnumDescriptor {
+	return file_oculuxus_v1_oculuxus_proto_enumTypes[5].Descriptor()
+}
+
+func (CallHierarchyRequest_Direction) Type() protoreflect.EnumType {
+	return &file_oculuxus_v1_oculuxus_proto_enumTypes[5]
+}
+
+func (x CallHierarchyRequest_Direction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CallHierarchyRequest_Direction.Descriptor instead.
+func (CallHierarchyRequest_Direction) EnumDescriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{44, 0}
+}
+
+type CallHierarchyItem_CallKind int32
+
+const (
+	CallHierarchyItem_CALL_KIND_UNSPECIFIED CallHierarchyItem_CallKind = 0
+	// A direct call of a function or method.
+	CallHierarchyItem_DIRECT CallHierarchyItem_CallKind = 1
+	// A call through an interface method, whose implementation is not
+	// known statically; `via` names the interface.
+	CallHierarchyItem_VIA_INTERFACE CallHierarchyItem_CallKind = 2
+	// A call of a function value: a variable, parameter, field or closure.
+	CallHierarchyItem_FUNCTION_VALUE CallHierarchyItem_CallKind = 3
+)
+
+// Enum value maps for CallHierarchyItem_CallKind.
+var (
+	CallHierarchyItem_CallKind_name = map[int32]string{
+		0: "CALL_KIND_UNSPECIFIED",
+		1: "DIRECT",
+		2: "VIA_INTERFACE",
+		3: "FUNCTION_VALUE",
+	}
+	CallHierarchyItem_CallKind_value = map[string]int32{
+		"CALL_KIND_UNSPECIFIED": 0,
+		"DIRECT":                1,
+		"VIA_INTERFACE":         2,
+		"FUNCTION_VALUE":        3,
+	}
+)
+
+func (x CallHierarchyItem_CallKind) Enum() *CallHierarchyItem_CallKind {
+	p := new(CallHierarchyItem_CallKind)
+	*p = x
+	return p
+}
+
+func (x CallHierarchyItem_CallKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CallHierarchyItem_CallKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_oculuxus_v1_oculuxus_proto_enumTypes[6].Descriptor()
+}
+
+func (CallHierarchyItem_CallKind) Type() protoreflect.EnumType {
+	return &file_oculuxus_v1_oculuxus_proto_enumTypes[6]
+}
+
+func (x CallHierarchyItem_CallKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CallHierarchyItem_CallKind.Descriptor instead.
+func (CallHierarchyItem_CallKind) EnumDescriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{46, 0}
+}
+
 type Request struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Chosen by the app; unique among in-flight requests. Must be non-zero.
@@ -404,6 +509,9 @@ type Request struct {
 	//	*Request_FileSource
 	//	*Request_Reload
 	//	*Request_Search
+	//	*Request_References
+	//	*Request_CallHierarchy
+	//	*Request_Hover
 	Body          isRequest_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -552,6 +660,33 @@ func (x *Request) GetSearch() *SearchRequest {
 	return nil
 }
 
+func (x *Request) GetReferences() *ReferencesRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_References); ok {
+			return x.References
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetCallHierarchy() *CallHierarchyRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_CallHierarchy); ok {
+			return x.CallHierarchy
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetHover() *HoverRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_Hover); ok {
+			return x.Hover
+		}
+	}
+	return nil
+}
+
 type isRequest_Body interface {
 	isRequest_Body()
 }
@@ -600,6 +735,18 @@ type Request_Search struct {
 	Search *SearchRequest `protobuf:"bytes,17,opt,name=search,proto3,oneof"`
 }
 
+type Request_References struct {
+	References *ReferencesRequest `protobuf:"bytes,18,opt,name=references,proto3,oneof"`
+}
+
+type Request_CallHierarchy struct {
+	CallHierarchy *CallHierarchyRequest `protobuf:"bytes,19,opt,name=call_hierarchy,json=callHierarchy,proto3,oneof"`
+}
+
+type Request_Hover struct {
+	Hover *HoverRequest `protobuf:"bytes,20,opt,name=hover,proto3,oneof"`
+}
+
 func (*Request_Cancel) isRequest_Body() {}
 
 func (*Request_Shutdown) isRequest_Body() {}
@@ -622,6 +769,12 @@ func (*Request_Reload) isRequest_Body() {}
 
 func (*Request_Search) isRequest_Body() {}
 
+func (*Request_References) isRequest_Body() {}
+
+func (*Request_CallHierarchy) isRequest_Body() {}
+
+func (*Request_Hover) isRequest_Body() {}
+
 type Response struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The id of the Request this answers.
@@ -639,6 +792,9 @@ type Response struct {
 	//	*Response_FileSource
 	//	*Response_Reload
 	//	*Response_Search
+	//	*Response_References
+	//	*Response_CallHierarchy
+	//	*Response_Hover
 	Body          isResponse_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -787,6 +943,33 @@ func (x *Response) GetSearch() *SearchResponse {
 	return nil
 }
 
+func (x *Response) GetReferences() *ReferencesResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_References); ok {
+			return x.References
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetCallHierarchy() *CallHierarchyResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_CallHierarchy); ok {
+			return x.CallHierarchy
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetHover() *HoverResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_Hover); ok {
+			return x.Hover
+		}
+	}
+	return nil
+}
+
 type isResponse_Body interface {
 	isResponse_Body()
 }
@@ -835,6 +1018,18 @@ type Response_Search struct {
 	Search *SearchResponse `protobuf:"bytes,17,opt,name=search,proto3,oneof"`
 }
 
+type Response_References struct {
+	References *ReferencesResponse `protobuf:"bytes,18,opt,name=references,proto3,oneof"`
+}
+
+type Response_CallHierarchy struct {
+	CallHierarchy *CallHierarchyResponse `protobuf:"bytes,19,opt,name=call_hierarchy,json=callHierarchy,proto3,oneof"`
+}
+
+type Response_Hover struct {
+	Hover *HoverResponse `protobuf:"bytes,20,opt,name=hover,proto3,oneof"`
+}
+
 func (*Response_Error) isResponse_Body() {}
 
 func (*Response_Progress) isResponse_Body() {}
@@ -856,6 +1051,12 @@ func (*Response_FileSource) isResponse_Body() {}
 func (*Response_Reload) isResponse_Body() {}
 
 func (*Response_Search) isResponse_Body() {}
+
+func (*Response_References) isResponse_Body() {}
+
+func (*Response_CallHierarchy) isResponse_Body() {}
+
+func (*Response_Hover) isResponse_Body() {}
 
 type Empty struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2210,7 +2411,9 @@ type DeclarationSourceResponse struct {
 	// The declaration's source, including its doc comment.
 	Source *Text `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
 	// The file and line where `source` begins.
-	Location      *Location `protobuf:"bytes,2,opt,name=location,proto3" json:"location,omitempty"`
+	Location *Location `protobuf:"bytes,2,opt,name=location,proto3" json:"location,omitempty"`
+	// The byte offset of `source` in its file, for Hover positions.
+	FileOffset    uint32 `protobuf:"varint,3,opt,name=file_offset,json=fileOffset,proto3" json:"file_offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2257,6 +2460,13 @@ func (x *DeclarationSourceResponse) GetLocation() *Location {
 		return x.Location
 	}
 	return nil
+}
+
+func (x *DeclarationSourceResponse) GetFileOffset() uint32 {
+	if x != nil {
+		return x.FileOffset
+	}
+	return 0
 }
 
 // Returns a whole file with highlight spans.
@@ -3229,11 +3439,1181 @@ func (x *IndexedSymbol) GetColumn() uint32 {
 	return 0
 }
 
+// A byte offset in a file, as delivered by FileSource, or by
+// DeclarationSource plus its file_offset.
+type Position struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	File          string                 `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
+	Offset        uint32                 `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Position) Reset() {
+	*x = Position{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Position) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Position) ProtoMessage() {}
+
+func (x *Position) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Position.ProtoReflect.Descriptor instead.
+func (*Position) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *Position) GetFile() string {
+	if x != nil {
+		return x.File
+	}
+	return ""
+}
+
+func (x *Position) GetOffset() uint32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+// Finds every use of a declaration. The project's own packages are
+// type-checked in the background after they are indexed for search, and
+// their references are recorded in the index cache. Dependencies and the
+// standard library are type-checked only once a request asks for them.
+//
+// A request waits, sending Progress, until the project's packages are
+// indexed, unless `wait` is set, in which case it waits for everything in
+// scope. `complete` says whether the results cover the whole scope; the
+// app can ask again, with `wait`, for the rest.
+type ReferencesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to At:
+	//
+	//	*ReferencesRequest_Symbol
+	//	*ReferencesRequest_Position
+	At isReferencesRequest_At `protobuf_oneof:"at"`
+	// The package the position's file belongs to. Only with `position`.
+	PackageId           string `protobuf:"bytes,3,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	IncludeDependencies bool   `protobuf:"varint,4,opt,name=include_dependencies,json=includeDependencies,proto3" json:"include_dependencies,omitempty"`
+	Wait                bool   `protobuf:"varint,5,opt,name=wait,proto3" json:"wait,omitempty"`
+	// At most this many references; 0 means 2000.
+	Limit         uint32 `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReferencesRequest) Reset() {
+	*x = ReferencesRequest{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReferencesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReferencesRequest) ProtoMessage() {}
+
+func (x *ReferencesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReferencesRequest.ProtoReflect.Descriptor instead.
+func (*ReferencesRequest) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *ReferencesRequest) GetAt() isReferencesRequest_At {
+	if x != nil {
+		return x.At
+	}
+	return nil
+}
+
+func (x *ReferencesRequest) GetSymbol() *SymbolRef {
+	if x != nil {
+		if x, ok := x.At.(*ReferencesRequest_Symbol); ok {
+			return x.Symbol
+		}
+	}
+	return nil
+}
+
+func (x *ReferencesRequest) GetPosition() *Position {
+	if x != nil {
+		if x, ok := x.At.(*ReferencesRequest_Position); ok {
+			return x.Position
+		}
+	}
+	return nil
+}
+
+func (x *ReferencesRequest) GetPackageId() string {
+	if x != nil {
+		return x.PackageId
+	}
+	return ""
+}
+
+func (x *ReferencesRequest) GetIncludeDependencies() bool {
+	if x != nil {
+		return x.IncludeDependencies
+	}
+	return false
+}
+
+func (x *ReferencesRequest) GetWait() bool {
+	if x != nil {
+		return x.Wait
+	}
+	return false
+}
+
+func (x *ReferencesRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type isReferencesRequest_At interface {
+	isReferencesRequest_At()
+}
+
+type ReferencesRequest_Symbol struct {
+	// A declaration from an outline, a search result or a token target.
+	Symbol *SymbolRef `protobuf:"bytes,1,opt,name=symbol,proto3,oneof"`
+}
+
+type ReferencesRequest_Position struct {
+	// An identifier in a file. A local variable or parameter has no
+	// declaration id; its uses within its package are found directly.
+	Position *Position `protobuf:"bytes,2,opt,name=position,proto3,oneof"`
+}
+
+func (*ReferencesRequest_Symbol) isReferencesRequest_At() {}
+
+func (*ReferencesRequest_Position) isReferencesRequest_At() {}
+
+type ReferencesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The declaration the references point to, resolved from the request.
+	Symbol *SymbolRef `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	// Grouped by package (the project's first), then file, then position.
+	References []*Reference `protobuf:"bytes,2,rep,name=references,proto3" json:"references,omitempty"`
+	// The number of references found, which exceeds len(references) when
+	// the limit cut the list.
+	Total           uint32 `protobuf:"varint,3,opt,name=total,proto3" json:"total,omitempty"`
+	Complete        bool   `protobuf:"varint,4,opt,name=complete,proto3" json:"complete,omitempty"`
+	IndexedPackages uint32 `protobuf:"varint,5,opt,name=indexed_packages,json=indexedPackages,proto3" json:"indexed_packages,omitempty"`
+	TotalPackages   uint32 `protobuf:"varint,6,opt,name=total_packages,json=totalPackages,proto3" json:"total_packages,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ReferencesResponse) Reset() {
+	*x = ReferencesResponse{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReferencesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReferencesResponse) ProtoMessage() {}
+
+func (x *ReferencesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReferencesResponse.ProtoReflect.Descriptor instead.
+func (*ReferencesResponse) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *ReferencesResponse) GetSymbol() *SymbolRef {
+	if x != nil {
+		return x.Symbol
+	}
+	return nil
+}
+
+func (x *ReferencesResponse) GetReferences() []*Reference {
+	if x != nil {
+		return x.References
+	}
+	return nil
+}
+
+func (x *ReferencesResponse) GetTotal() uint32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+func (x *ReferencesResponse) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
+func (x *ReferencesResponse) GetIndexedPackages() uint32 {
+	if x != nil {
+		return x.IndexedPackages
+	}
+	return 0
+}
+
+func (x *ReferencesResponse) GetTotalPackages() uint32 {
+	if x != nil {
+		return x.TotalPackages
+	}
+	return 0
+}
+
+// One use of a declaration.
+type Reference struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	PackageId   string                 `protobuf:"bytes,1,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	PackageName string                 `protobuf:"bytes,2,opt,name=package_name,json=packageName,proto3" json:"package_name,omitempty"`
+	Origin      PackageOrigin          `protobuf:"varint,3,opt,name=origin,proto3,enum=oculuxus.v1.PackageOrigin" json:"origin,omitempty"`
+	Location    *Location              `protobuf:"bytes,4,opt,name=location,proto3" json:"location,omitempty"`
+	// The source line the use is on, without leading whitespace.
+	LineText string `protobuf:"bytes,5,opt,name=line_text,json=lineText,proto3" json:"line_text,omitempty"`
+	// The identifier within line_text.
+	Range *Range `protobuf:"bytes,6,opt,name=range,proto3" json:"range,omitempty"`
+	// The identifier is called.
+	Call bool `protobuf:"varint,7,opt,name=call,proto3" json:"call,omitempty"`
+	// The use goes through a method of an interface the declaration
+	// implements; `via` names that interface, such as "io.Reader".
+	ViaInterface bool   `protobuf:"varint,8,opt,name=via_interface,json=viaInterface,proto3" json:"via_interface,omitempty"`
+	Via          string `protobuf:"bytes,9,opt,name=via,proto3" json:"via,omitempty"`
+	// The declaration in package_id that contains the use: "Name" or
+	// "Type.Method" for a function body, the variable's id for an
+	// initializer. Empty for a package-level type.
+	EnclosingId   string `protobuf:"bytes,10,opt,name=enclosing_id,json=enclosingId,proto3" json:"enclosing_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Reference) Reset() {
+	*x = Reference{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Reference) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Reference) ProtoMessage() {}
+
+func (x *Reference) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Reference.ProtoReflect.Descriptor instead.
+func (*Reference) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *Reference) GetPackageId() string {
+	if x != nil {
+		return x.PackageId
+	}
+	return ""
+}
+
+func (x *Reference) GetPackageName() string {
+	if x != nil {
+		return x.PackageName
+	}
+	return ""
+}
+
+func (x *Reference) GetOrigin() PackageOrigin {
+	if x != nil {
+		return x.Origin
+	}
+	return PackageOrigin_PACKAGE_ORIGIN_UNSPECIFIED
+}
+
+func (x *Reference) GetLocation() *Location {
+	if x != nil {
+		return x.Location
+	}
+	return nil
+}
+
+func (x *Reference) GetLineText() string {
+	if x != nil {
+		return x.LineText
+	}
+	return ""
+}
+
+func (x *Reference) GetRange() *Range {
+	if x != nil {
+		return x.Range
+	}
+	return nil
+}
+
+func (x *Reference) GetCall() bool {
+	if x != nil {
+		return x.Call
+	}
+	return false
+}
+
+func (x *Reference) GetViaInterface() bool {
+	if x != nil {
+		return x.ViaInterface
+	}
+	return false
+}
+
+func (x *Reference) GetVia() string {
+	if x != nil {
+		return x.Via
+	}
+	return ""
+}
+
+func (x *Reference) GetEnclosingId() string {
+	if x != nil {
+		return x.EnclosingId
+	}
+	return ""
+}
+
+// Lists one level of callers or callees of a function or method. Callers
+// come from the reference index, under the same waiting rules as
+// ReferencesRequest. Callees come from the function's own body, so they
+// never wait on the index.
+type CallHierarchyRequest struct {
+	state     protoimpl.MessageState         `protogen:"open.v1"`
+	Symbol    *SymbolRef                     `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Direction CallHierarchyRequest_Direction `protobuf:"varint,2,opt,name=direction,proto3,enum=oculuxus.v1.CallHierarchyRequest_Direction" json:"direction,omitempty"`
+	// For callers: also look in dependencies and the standard library.
+	IncludeDependencies bool `protobuf:"varint,3,opt,name=include_dependencies,json=includeDependencies,proto3" json:"include_dependencies,omitempty"`
+	Wait                bool `protobuf:"varint,4,opt,name=wait,proto3" json:"wait,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *CallHierarchyRequest) Reset() {
+	*x = CallHierarchyRequest{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallHierarchyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallHierarchyRequest) ProtoMessage() {}
+
+func (x *CallHierarchyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallHierarchyRequest.ProtoReflect.Descriptor instead.
+func (*CallHierarchyRequest) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *CallHierarchyRequest) GetSymbol() *SymbolRef {
+	if x != nil {
+		return x.Symbol
+	}
+	return nil
+}
+
+func (x *CallHierarchyRequest) GetDirection() CallHierarchyRequest_Direction {
+	if x != nil {
+		return x.Direction
+	}
+	return CallHierarchyRequest_DIRECTION_UNSPECIFIED
+}
+
+func (x *CallHierarchyRequest) GetIncludeDependencies() bool {
+	if x != nil {
+		return x.IncludeDependencies
+	}
+	return false
+}
+
+func (x *CallHierarchyRequest) GetWait() bool {
+	if x != nil {
+		return x.Wait
+	}
+	return false
+}
+
+type CallHierarchyResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Items []*CallHierarchyItem   `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	// As in ReferencesResponse; always complete for callees.
+	Complete        bool   `protobuf:"varint,2,opt,name=complete,proto3" json:"complete,omitempty"`
+	IndexedPackages uint32 `protobuf:"varint,3,opt,name=indexed_packages,json=indexedPackages,proto3" json:"indexed_packages,omitempty"`
+	TotalPackages   uint32 `protobuf:"varint,4,opt,name=total_packages,json=totalPackages,proto3" json:"total_packages,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *CallHierarchyResponse) Reset() {
+	*x = CallHierarchyResponse{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallHierarchyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallHierarchyResponse) ProtoMessage() {}
+
+func (x *CallHierarchyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallHierarchyResponse.ProtoReflect.Descriptor instead.
+func (*CallHierarchyResponse) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *CallHierarchyResponse) GetItems() []*CallHierarchyItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *CallHierarchyResponse) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
+func (x *CallHierarchyResponse) GetIndexedPackages() uint32 {
+	if x != nil {
+		return x.IndexedPackages
+	}
+	return 0
+}
+
+func (x *CallHierarchyResponse) GetTotalPackages() uint32 {
+	if x != nil {
+		return x.TotalPackages
+	}
+	return 0
+}
+
+// A caller or callee, with the calls that connect it to the request's
+// function.
+type CallHierarchyItem struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The function at the other end of the calls. Empty declaration_id for
+	// a callee without a navigable declaration, such as a local function
+	// value or a closure.
+	Symbol      *SymbolRef    `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	PackageName string        `protobuf:"bytes,2,opt,name=package_name,json=packageName,proto3" json:"package_name,omitempty"`
+	Origin      PackageOrigin `protobuf:"varint,3,opt,name=origin,proto3,enum=oculuxus.v1.PackageOrigin" json:"origin,omitempty"`
+	Kind        SymbolKind    `protobuf:"varint,4,opt,name=kind,proto3,enum=oculuxus.v1.SymbolKind" json:"kind,omitempty"`
+	// The function on one line, such as "func (c Circle) Area() float64",
+	// or the called expression for a function value.
+	Signature string `protobuf:"bytes,5,opt,name=signature,proto3" json:"signature,omitempty"`
+	// Where the function is declared; absent without a declaration.
+	Location *Location                  `protobuf:"bytes,6,opt,name=location,proto3" json:"location,omitempty"`
+	CallKind CallHierarchyItem_CallKind `protobuf:"varint,7,opt,name=call_kind,json=callKind,proto3,enum=oculuxus.v1.CallHierarchyItem_CallKind" json:"call_kind,omitempty"`
+	Via      string                     `protobuf:"bytes,8,opt,name=via,proto3" json:"via,omitempty"`
+	// The call sites, inside the caller (for CALLERS, each site's
+	// enclosing_id is this item's symbol) or inside the request's function.
+	Sites         []*Reference `protobuf:"bytes,9,rep,name=sites,proto3" json:"sites,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CallHierarchyItem) Reset() {
+	*x = CallHierarchyItem{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallHierarchyItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallHierarchyItem) ProtoMessage() {}
+
+func (x *CallHierarchyItem) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallHierarchyItem.ProtoReflect.Descriptor instead.
+func (*CallHierarchyItem) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *CallHierarchyItem) GetSymbol() *SymbolRef {
+	if x != nil {
+		return x.Symbol
+	}
+	return nil
+}
+
+func (x *CallHierarchyItem) GetPackageName() string {
+	if x != nil {
+		return x.PackageName
+	}
+	return ""
+}
+
+func (x *CallHierarchyItem) GetOrigin() PackageOrigin {
+	if x != nil {
+		return x.Origin
+	}
+	return PackageOrigin_PACKAGE_ORIGIN_UNSPECIFIED
+}
+
+func (x *CallHierarchyItem) GetKind() SymbolKind {
+	if x != nil {
+		return x.Kind
+	}
+	return SymbolKind_SYMBOL_KIND_UNSPECIFIED
+}
+
+func (x *CallHierarchyItem) GetSignature() string {
+	if x != nil {
+		return x.Signature
+	}
+	return ""
+}
+
+func (x *CallHierarchyItem) GetLocation() *Location {
+	if x != nil {
+		return x.Location
+	}
+	return nil
+}
+
+func (x *CallHierarchyItem) GetCallKind() CallHierarchyItem_CallKind {
+	if x != nil {
+		return x.CallKind
+	}
+	return CallHierarchyItem_CALL_KIND_UNSPECIFIED
+}
+
+func (x *CallHierarchyItem) GetVia() string {
+	if x != nil {
+		return x.Via
+	}
+	return ""
+}
+
+func (x *CallHierarchyItem) GetSites() []*Reference {
+	if x != nil {
+		return x.Sites
+	}
+	return nil
+}
+
+// Describes the identifier at a position, or a declaration, for a hover
+// card.
+type HoverRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to At:
+	//
+	//	*HoverRequest_Symbol
+	//	*HoverRequest_Position
+	At isHoverRequest_At `protobuf_oneof:"at"`
+	// The package the position's file belongs to. Only with `position`.
+	PackageId     string `protobuf:"bytes,3,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	IncludeTests  bool   `protobuf:"varint,4,opt,name=include_tests,json=includeTests,proto3" json:"include_tests,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HoverRequest) Reset() {
+	*x = HoverRequest{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HoverRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HoverRequest) ProtoMessage() {}
+
+func (x *HoverRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HoverRequest.ProtoReflect.Descriptor instead.
+func (*HoverRequest) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *HoverRequest) GetAt() isHoverRequest_At {
+	if x != nil {
+		return x.At
+	}
+	return nil
+}
+
+func (x *HoverRequest) GetSymbol() *SymbolRef {
+	if x != nil {
+		if x, ok := x.At.(*HoverRequest_Symbol); ok {
+			return x.Symbol
+		}
+	}
+	return nil
+}
+
+func (x *HoverRequest) GetPosition() *Position {
+	if x != nil {
+		if x, ok := x.At.(*HoverRequest_Position); ok {
+			return x.Position
+		}
+	}
+	return nil
+}
+
+func (x *HoverRequest) GetPackageId() string {
+	if x != nil {
+		return x.PackageId
+	}
+	return ""
+}
+
+func (x *HoverRequest) GetIncludeTests() bool {
+	if x != nil {
+		return x.IncludeTests
+	}
+	return false
+}
+
+type isHoverRequest_At interface {
+	isHoverRequest_At()
+}
+
+type HoverRequest_Symbol struct {
+	Symbol *SymbolRef `protobuf:"bytes,1,opt,name=symbol,proto3,oneof"`
+}
+
+type HoverRequest_Position struct {
+	Position *Position `protobuf:"bytes,2,opt,name=position,proto3,oneof"`
+}
+
+func (*HoverRequest_Symbol) isHoverRequest_At() {}
+
+func (*HoverRequest_Position) isHoverRequest_At() {}
+
+type HoverResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Absent when there is nothing to describe at the position.
+	Hover         *Hover `protobuf:"bytes,1,opt,name=hover,proto3" json:"hover,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HoverResponse) Reset() {
+	*x = HoverResponse{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HoverResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HoverResponse) ProtoMessage() {}
+
+func (x *HoverResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HoverResponse.ProtoReflect.Descriptor instead.
+func (*HoverResponse) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *HoverResponse) GetHover() *Hover {
+	if x != nil {
+		return x.Hover
+	}
+	return nil
+}
+
+type Hover struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What the identifier is: "func", "method", "struct", "interface",
+	// "type", "const", "var", "field", "package", "parameter",
+	// "local variable", "type parameter", "builtin", "label".
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// The declaration on one line, highlighted and clickable.
+	Signature *Text `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
+	// The package that declares it; empty for builtins and locals.
+	PackageId   string `protobuf:"bytes,4,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	PackageName string `protobuf:"bytes,5,opt,name=package_name,json=packageName,proto3" json:"package_name,omitempty"`
+	// The doc comment, as plain text.
+	Doc string `protobuf:"bytes,6,opt,name=doc,proto3" json:"doc,omitempty"`
+	// Where it is declared.
+	Location *Location `protobuf:"bytes,7,opt,name=location,proto3" json:"location,omitempty"`
+	// The declaration, when the app can navigate to it.
+	Target        *SymbolRef `protobuf:"bytes,8,opt,name=target,proto3" json:"target,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Hover) Reset() {
+	*x = Hover{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Hover) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Hover) ProtoMessage() {}
+
+func (x *Hover) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Hover.ProtoReflect.Descriptor instead.
+func (*Hover) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *Hover) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *Hover) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Hover) GetSignature() *Text {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+func (x *Hover) GetPackageId() string {
+	if x != nil {
+		return x.PackageId
+	}
+	return ""
+}
+
+func (x *Hover) GetPackageName() string {
+	if x != nil {
+		return x.PackageName
+	}
+	return ""
+}
+
+func (x *Hover) GetDoc() string {
+	if x != nil {
+		return x.Doc
+	}
+	return ""
+}
+
+func (x *Hover) GetLocation() *Location {
+	if x != nil {
+		return x.Location
+	}
+	return nil
+}
+
+func (x *Hover) GetTarget() *SymbolRef {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+// The references in one package, recorded from go/types once the package
+// is type-checked in the background. Kept in a separate cache file from
+// the symbols, and for dependencies only once they were asked for.
+type IndexedReferences struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	PackageId   string                 `protobuf:"bytes,1,opt,name=package_id,json=packageId,proto3" json:"package_id,omitempty"`
+	Fingerprint []byte                 `protobuf:"bytes,2,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
+	Files       []string               `protobuf:"bytes,3,rep,name=files,proto3" json:"files,omitempty"`
+	// The packages referenced; IndexedReference.package indexes this.
+	Packages []string `protobuf:"bytes,4,rep,name=packages,proto3" json:"packages,omitempty"`
+	// The ids of the declarations that contain references, in this
+	// package; IndexedReference.enclosing indexes this (0 means none).
+	Enclosing     []string            `protobuf:"bytes,5,rep,name=enclosing,proto3" json:"enclosing,omitempty"`
+	References    []*IndexedReference `protobuf:"bytes,6,rep,name=references,proto3" json:"references,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IndexedReferences) Reset() {
+	*x = IndexedReferences{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IndexedReferences) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IndexedReferences) ProtoMessage() {}
+
+func (x *IndexedReferences) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IndexedReferences.ProtoReflect.Descriptor instead.
+func (*IndexedReferences) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *IndexedReferences) GetPackageId() string {
+	if x != nil {
+		return x.PackageId
+	}
+	return ""
+}
+
+func (x *IndexedReferences) GetFingerprint() []byte {
+	if x != nil {
+		return x.Fingerprint
+	}
+	return nil
+}
+
+func (x *IndexedReferences) GetFiles() []string {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *IndexedReferences) GetPackages() []string {
+	if x != nil {
+		return x.Packages
+	}
+	return nil
+}
+
+func (x *IndexedReferences) GetEnclosing() []string {
+	if x != nil {
+		return x.Enclosing
+	}
+	return nil
+}
+
+func (x *IndexedReferences) GetReferences() []*IndexedReference {
+	if x != nil {
+		return x.References
+	}
+	return nil
+}
+
+type IndexedReference struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Package       uint32                 `protobuf:"varint,1,opt,name=package,proto3" json:"package,omitempty"`
+	DeclarationId string                 `protobuf:"bytes,2,opt,name=declaration_id,json=declarationId,proto3" json:"declaration_id,omitempty"`
+	File          uint32                 `protobuf:"varint,3,opt,name=file,proto3" json:"file,omitempty"`
+	Line          uint32                 `protobuf:"varint,4,opt,name=line,proto3" json:"line,omitempty"`
+	Column        uint32                 `protobuf:"varint,5,opt,name=column,proto3" json:"column,omitempty"`
+	// The identifier's length in bytes.
+	Length uint32 `protobuf:"varint,6,opt,name=length,proto3" json:"length,omitempty"`
+	Call   bool   `protobuf:"varint,7,opt,name=call,proto3" json:"call,omitempty"`
+	// The declaration is a method of an interface.
+	InterfaceMethod bool `protobuf:"varint,8,opt,name=interface_method,json=interfaceMethod,proto3" json:"interface_method,omitempty"`
+	// 1-based index into IndexedReferences.enclosing; 0 for none.
+	Enclosing     uint32 `protobuf:"varint,9,opt,name=enclosing,proto3" json:"enclosing,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IndexedReference) Reset() {
+	*x = IndexedReference{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IndexedReference) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IndexedReference) ProtoMessage() {}
+
+func (x *IndexedReference) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IndexedReference.ProtoReflect.Descriptor instead.
+func (*IndexedReference) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *IndexedReference) GetPackage() uint32 {
+	if x != nil {
+		return x.Package
+	}
+	return 0
+}
+
+func (x *IndexedReference) GetDeclarationId() string {
+	if x != nil {
+		return x.DeclarationId
+	}
+	return ""
+}
+
+func (x *IndexedReference) GetFile() uint32 {
+	if x != nil {
+		return x.File
+	}
+	return 0
+}
+
+func (x *IndexedReference) GetLine() uint32 {
+	if x != nil {
+		return x.Line
+	}
+	return 0
+}
+
+func (x *IndexedReference) GetColumn() uint32 {
+	if x != nil {
+		return x.Column
+	}
+	return 0
+}
+
+func (x *IndexedReference) GetLength() uint32 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+func (x *IndexedReference) GetCall() bool {
+	if x != nil {
+		return x.Call
+	}
+	return false
+}
+
+func (x *IndexedReference) GetInterfaceMethod() bool {
+	if x != nil {
+		return x.InterfaceMethod
+	}
+	return false
+}
+
+func (x *IndexedReference) GetEnclosing() uint32 {
+	if x != nil {
+		return x.Enclosing
+	}
+	return 0
+}
+
+type ReferenceIndex struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Format        uint32                 `protobuf:"varint,1,opt,name=format,proto3" json:"format,omitempty"`
+	Build         string                 `protobuf:"bytes,2,opt,name=build,proto3" json:"build,omitempty"`
+	Packages      []*IndexedReferences   `protobuf:"bytes,3,rep,name=packages,proto3" json:"packages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReferenceIndex) Reset() {
+	*x = ReferenceIndex{}
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReferenceIndex) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReferenceIndex) ProtoMessage() {}
+
+func (x *ReferenceIndex) ProtoReflect() protoreflect.Message {
+	mi := &file_oculuxus_v1_oculuxus_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReferenceIndex.ProtoReflect.Descriptor instead.
+func (*ReferenceIndex) Descriptor() ([]byte, []int) {
+	return file_oculuxus_v1_oculuxus_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *ReferenceIndex) GetFormat() uint32 {
+	if x != nil {
+		return x.Format
+	}
+	return 0
+}
+
+func (x *ReferenceIndex) GetBuild() string {
+	if x != nil {
+		return x.Build
+	}
+	return ""
+}
+
+func (x *ReferenceIndex) GetPackages() []*IndexedReferences {
+	if x != nil {
+		return x.Packages
+	}
+	return nil
+}
+
 var File_oculuxus_v1_oculuxus_proto protoreflect.FileDescriptor
 
 const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\n" +
-	"\x1aoculuxus/v1/oculuxus.proto\x12\voculuxus.v1\"\xe3\x05\n" +
+	"\x1aoculuxus/v1/oculuxus.proto\x12\voculuxus.v1\"\xa4\a\n" +
 	"\aRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12-\n" +
 	"\x06cancel\x18\x02 \x01(\v2\x13.oculuxus.v1.CancelH\x00R\x06cancel\x123\n" +
@@ -3248,8 +4628,13 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\vfile_source\x18\x0f \x01(\v2\x1e.oculuxus.v1.FileSourceRequestH\x00R\n" +
 	"fileSource\x124\n" +
 	"\x06reload\x18\x10 \x01(\v2\x1a.oculuxus.v1.ReloadRequestH\x00R\x06reload\x124\n" +
-	"\x06search\x18\x11 \x01(\v2\x1a.oculuxus.v1.SearchRequestH\x00R\x06searchB\x06\n" +
-	"\x04body\"\xcc\x05\n" +
+	"\x06search\x18\x11 \x01(\v2\x1a.oculuxus.v1.SearchRequestH\x00R\x06search\x12@\n" +
+	"\n" +
+	"references\x18\x12 \x01(\v2\x1e.oculuxus.v1.ReferencesRequestH\x00R\n" +
+	"references\x12J\n" +
+	"\x0ecall_hierarchy\x18\x13 \x01(\v2!.oculuxus.v1.CallHierarchyRequestH\x00R\rcallHierarchy\x121\n" +
+	"\x05hover\x18\x14 \x01(\v2\x19.oculuxus.v1.HoverRequestH\x00R\x05hoverB\x06\n" +
+	"\x04body\"\x90\a\n" +
 	"\bResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x12*\n" +
 	"\x05error\x18\x02 \x01(\v2\x12.oculuxus.v1.ErrorH\x00R\x05error\x123\n" +
@@ -3264,7 +4649,12 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\vfile_source\x18\x0f \x01(\v2\x1f.oculuxus.v1.FileSourceResponseH\x00R\n" +
 	"fileSource\x125\n" +
 	"\x06reload\x18\x10 \x01(\v2\x1b.oculuxus.v1.ReloadResponseH\x00R\x06reload\x125\n" +
-	"\x06search\x18\x11 \x01(\v2\x1b.oculuxus.v1.SearchResponseH\x00R\x06searchB\x06\n" +
+	"\x06search\x18\x11 \x01(\v2\x1b.oculuxus.v1.SearchResponseH\x00R\x06search\x12A\n" +
+	"\n" +
+	"references\x18\x12 \x01(\v2\x1f.oculuxus.v1.ReferencesResponseH\x00R\n" +
+	"references\x12K\n" +
+	"\x0ecall_hierarchy\x18\x13 \x01(\v2\".oculuxus.v1.CallHierarchyResponseH\x00R\rcallHierarchy\x122\n" +
+	"\x05hover\x18\x14 \x01(\v2\x1a.oculuxus.v1.HoverResponseH\x00R\x05hoverB\x06\n" +
 	"\x04body\"\a\n" +
 	"\x05Empty\"'\n" +
 	"\x06Cancel\x12\x1d\n" +
@@ -3372,10 +4762,12 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\n" +
 	"package_id\x18\x01 \x01(\tR\tpackageId\x12%\n" +
 	"\x0edeclaration_id\x18\x02 \x01(\tR\rdeclarationId\x12#\n" +
-	"\rinclude_tests\x18\x03 \x01(\bR\fincludeTests\"y\n" +
+	"\rinclude_tests\x18\x03 \x01(\bR\fincludeTests\"\x9a\x01\n" +
 	"\x19DeclarationSourceResponse\x12)\n" +
 	"\x06source\x18\x01 \x01(\v2\x11.oculuxus.v1.TextR\x06source\x121\n" +
-	"\blocation\x18\x02 \x01(\v2\x15.oculuxus.v1.LocationR\blocation\"k\n" +
+	"\blocation\x18\x02 \x01(\v2\x15.oculuxus.v1.LocationR\blocation\x12\x1f\n" +
+	"\vfile_offset\x18\x03 \x01(\rR\n" +
+	"fileOffset\"k\n" +
 	"\x11FileSourceRequest\x12\x1d\n" +
 	"\n" +
 	"package_id\x18\x01 \x01(\tR\tpackageId\x12\x12\n" +
@@ -3443,7 +4835,114 @@ const file_oculuxus_v1_oculuxus_proto_rawDesc = "" +
 	"\tsignature\x18\x03 \x01(\tR\tsignature\x12\x12\n" +
 	"\x04file\x18\x04 \x01(\rR\x04file\x12\x12\n" +
 	"\x04line\x18\x05 \x01(\rR\x04line\x12\x16\n" +
-	"\x06column\x18\x06 \x01(\rR\x06column*X\n" +
+	"\x06column\x18\x06 \x01(\rR\x06column\"6\n" +
+	"\bPosition\x12\x12\n" +
+	"\x04file\x18\x01 \x01(\tR\x04file\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\rR\x06offset\"\xfc\x01\n" +
+	"\x11ReferencesRequest\x120\n" +
+	"\x06symbol\x18\x01 \x01(\v2\x16.oculuxus.v1.SymbolRefH\x00R\x06symbol\x123\n" +
+	"\bposition\x18\x02 \x01(\v2\x15.oculuxus.v1.PositionH\x00R\bposition\x12\x1d\n" +
+	"\n" +
+	"package_id\x18\x03 \x01(\tR\tpackageId\x121\n" +
+	"\x14include_dependencies\x18\x04 \x01(\bR\x13includeDependencies\x12\x12\n" +
+	"\x04wait\x18\x05 \x01(\bR\x04wait\x12\x14\n" +
+	"\x05limit\x18\x06 \x01(\rR\x05limitB\x04\n" +
+	"\x02at\"\x80\x02\n" +
+	"\x12ReferencesResponse\x12.\n" +
+	"\x06symbol\x18\x01 \x01(\v2\x16.oculuxus.v1.SymbolRefR\x06symbol\x126\n" +
+	"\n" +
+	"references\x18\x02 \x03(\v2\x16.oculuxus.v1.ReferenceR\n" +
+	"references\x12\x14\n" +
+	"\x05total\x18\x03 \x01(\rR\x05total\x12\x1a\n" +
+	"\bcomplete\x18\x04 \x01(\bR\bcomplete\x12)\n" +
+	"\x10indexed_packages\x18\x05 \x01(\rR\x0findexedPackages\x12%\n" +
+	"\x0etotal_packages\x18\x06 \x01(\rR\rtotalPackages\"\xe9\x02\n" +
+	"\tReference\x12\x1d\n" +
+	"\n" +
+	"package_id\x18\x01 \x01(\tR\tpackageId\x12!\n" +
+	"\fpackage_name\x18\x02 \x01(\tR\vpackageName\x122\n" +
+	"\x06origin\x18\x03 \x01(\x0e2\x1a.oculuxus.v1.PackageOriginR\x06origin\x121\n" +
+	"\blocation\x18\x04 \x01(\v2\x15.oculuxus.v1.LocationR\blocation\x12\x1b\n" +
+	"\tline_text\x18\x05 \x01(\tR\blineText\x12(\n" +
+	"\x05range\x18\x06 \x01(\v2\x12.oculuxus.v1.RangeR\x05range\x12\x12\n" +
+	"\x04call\x18\a \x01(\bR\x04call\x12#\n" +
+	"\rvia_interface\x18\b \x01(\bR\fviaInterface\x12\x10\n" +
+	"\x03via\x18\t \x01(\tR\x03via\x12!\n" +
+	"\fenclosing_id\x18\n" +
+	" \x01(\tR\venclosingId\"\x9a\x02\n" +
+	"\x14CallHierarchyRequest\x12.\n" +
+	"\x06symbol\x18\x01 \x01(\v2\x16.oculuxus.v1.SymbolRefR\x06symbol\x12I\n" +
+	"\tdirection\x18\x02 \x01(\x0e2+.oculuxus.v1.CallHierarchyRequest.DirectionR\tdirection\x121\n" +
+	"\x14include_dependencies\x18\x03 \x01(\bR\x13includeDependencies\x12\x12\n" +
+	"\x04wait\x18\x04 \x01(\bR\x04wait\"@\n" +
+	"\tDirection\x12\x19\n" +
+	"\x15DIRECTION_UNSPECIFIED\x10\x00\x12\v\n" +
+	"\aCALLERS\x10\x01\x12\v\n" +
+	"\aCALLEES\x10\x02\"\xbb\x01\n" +
+	"\x15CallHierarchyResponse\x124\n" +
+	"\x05items\x18\x01 \x03(\v2\x1e.oculuxus.v1.CallHierarchyItemR\x05items\x12\x1a\n" +
+	"\bcomplete\x18\x02 \x01(\bR\bcomplete\x12)\n" +
+	"\x10indexed_packages\x18\x03 \x01(\rR\x0findexedPackages\x12%\n" +
+	"\x0etotal_packages\x18\x04 \x01(\rR\rtotalPackages\"\xf8\x03\n" +
+	"\x11CallHierarchyItem\x12.\n" +
+	"\x06symbol\x18\x01 \x01(\v2\x16.oculuxus.v1.SymbolRefR\x06symbol\x12!\n" +
+	"\fpackage_name\x18\x02 \x01(\tR\vpackageName\x122\n" +
+	"\x06origin\x18\x03 \x01(\x0e2\x1a.oculuxus.v1.PackageOriginR\x06origin\x12+\n" +
+	"\x04kind\x18\x04 \x01(\x0e2\x17.oculuxus.v1.SymbolKindR\x04kind\x12\x1c\n" +
+	"\tsignature\x18\x05 \x01(\tR\tsignature\x121\n" +
+	"\blocation\x18\x06 \x01(\v2\x15.oculuxus.v1.LocationR\blocation\x12D\n" +
+	"\tcall_kind\x18\a \x01(\x0e2'.oculuxus.v1.CallHierarchyItem.CallKindR\bcallKind\x12\x10\n" +
+	"\x03via\x18\b \x01(\tR\x03via\x12,\n" +
+	"\x05sites\x18\t \x03(\v2\x16.oculuxus.v1.ReferenceR\x05sites\"X\n" +
+	"\bCallKind\x12\x19\n" +
+	"\x15CALL_KIND_UNSPECIFIED\x10\x00\x12\n" +
+	"\n" +
+	"\x06DIRECT\x10\x01\x12\x11\n" +
+	"\rVIA_INTERFACE\x10\x02\x12\x12\n" +
+	"\x0eFUNCTION_VALUE\x10\x03\"\xbf\x01\n" +
+	"\fHoverRequest\x120\n" +
+	"\x06symbol\x18\x01 \x01(\v2\x16.oculuxus.v1.SymbolRefH\x00R\x06symbol\x123\n" +
+	"\bposition\x18\x02 \x01(\v2\x15.oculuxus.v1.PositionH\x00R\bposition\x12\x1d\n" +
+	"\n" +
+	"package_id\x18\x03 \x01(\tR\tpackageId\x12#\n" +
+	"\rinclude_tests\x18\x04 \x01(\bR\fincludeTestsB\x04\n" +
+	"\x02at\"9\n" +
+	"\rHoverResponse\x12(\n" +
+	"\x05hover\x18\x01 \x01(\v2\x12.oculuxus.v1.HoverR\x05hover\"\x97\x02\n" +
+	"\x05Hover\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12/\n" +
+	"\tsignature\x18\x03 \x01(\v2\x11.oculuxus.v1.TextR\tsignature\x12\x1d\n" +
+	"\n" +
+	"package_id\x18\x04 \x01(\tR\tpackageId\x12!\n" +
+	"\fpackage_name\x18\x05 \x01(\tR\vpackageName\x12\x10\n" +
+	"\x03doc\x18\x06 \x01(\tR\x03doc\x121\n" +
+	"\blocation\x18\a \x01(\v2\x15.oculuxus.v1.LocationR\blocation\x12.\n" +
+	"\x06target\x18\b \x01(\v2\x16.oculuxus.v1.SymbolRefR\x06target\"\xe3\x01\n" +
+	"\x11IndexedReferences\x12\x1d\n" +
+	"\n" +
+	"package_id\x18\x01 \x01(\tR\tpackageId\x12 \n" +
+	"\vfingerprint\x18\x02 \x01(\fR\vfingerprint\x12\x14\n" +
+	"\x05files\x18\x03 \x03(\tR\x05files\x12\x1a\n" +
+	"\bpackages\x18\x04 \x03(\tR\bpackages\x12\x1c\n" +
+	"\tenclosing\x18\x05 \x03(\tR\tenclosing\x12=\n" +
+	"\n" +
+	"references\x18\x06 \x03(\v2\x1d.oculuxus.v1.IndexedReferenceR\n" +
+	"references\"\x88\x02\n" +
+	"\x10IndexedReference\x12\x18\n" +
+	"\apackage\x18\x01 \x01(\rR\apackage\x12%\n" +
+	"\x0edeclaration_id\x18\x02 \x01(\tR\rdeclarationId\x12\x12\n" +
+	"\x04file\x18\x03 \x01(\rR\x04file\x12\x12\n" +
+	"\x04line\x18\x04 \x01(\rR\x04line\x12\x16\n" +
+	"\x06column\x18\x05 \x01(\rR\x06column\x12\x16\n" +
+	"\x06length\x18\x06 \x01(\rR\x06length\x12\x12\n" +
+	"\x04call\x18\a \x01(\bR\x04call\x12)\n" +
+	"\x10interface_method\x18\b \x01(\bR\x0finterfaceMethod\x12\x1c\n" +
+	"\tenclosing\x18\t \x01(\rR\tenclosing\"z\n" +
+	"\x0eReferenceIndex\x12\x16\n" +
+	"\x06format\x18\x01 \x01(\rR\x06format\x12\x14\n" +
+	"\x05build\x18\x02 \x01(\tR\x05build\x12:\n" +
+	"\bpackages\x18\x03 \x03(\v2\x1e.oculuxus.v1.IndexedReferencesR\bpackages*X\n" +
 	"\rPackageOrigin\x12\x1e\n" +
 	"\x1aPACKAGE_ORIGIN_UNSPECIFIED\x10\x00\x12\v\n" +
 	"\aPROJECT\x10\x01\x12\x0e\n" +
@@ -3507,113 +5006,158 @@ func file_oculuxus_v1_oculuxus_proto_rawDescGZIP() []byte {
 	return file_oculuxus_v1_oculuxus_proto_rawDescData
 }
 
-var file_oculuxus_v1_oculuxus_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_oculuxus_v1_oculuxus_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
+var file_oculuxus_v1_oculuxus_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_oculuxus_v1_oculuxus_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
 var file_oculuxus_v1_oculuxus_proto_goTypes = []any{
-	(PackageOrigin)(0),                // 0: oculuxus.v1.PackageOrigin
-	(SymbolKind)(0),                   // 1: oculuxus.v1.SymbolKind
-	(TokenType)(0),                    // 2: oculuxus.v1.TokenType
-	(TokenModifier)(0),                // 3: oculuxus.v1.TokenModifier
-	(Error_Code)(0),                   // 4: oculuxus.v1.Error.Code
-	(*Request)(nil),                   // 5: oculuxus.v1.Request
-	(*Response)(nil),                  // 6: oculuxus.v1.Response
-	(*Empty)(nil),                     // 7: oculuxus.v1.Empty
-	(*Cancel)(nil),                    // 8: oculuxus.v1.Cancel
-	(*Shutdown)(nil),                  // 9: oculuxus.v1.Shutdown
-	(*Error)(nil),                     // 10: oculuxus.v1.Error
-	(*Progress)(nil),                  // 11: oculuxus.v1.Progress
-	(*InfoRequest)(nil),               // 12: oculuxus.v1.InfoRequest
-	(*InfoResponse)(nil),              // 13: oculuxus.v1.InfoResponse
-	(*OpenProjectRequest)(nil),        // 14: oculuxus.v1.OpenProjectRequest
-	(*OpenProjectResponse)(nil),       // 15: oculuxus.v1.OpenProjectResponse
-	(*Project)(nil),                   // 16: oculuxus.v1.Project
-	(*Module)(nil),                    // 17: oculuxus.v1.Module
-	(*CloseProjectRequest)(nil),       // 18: oculuxus.v1.CloseProjectRequest
-	(*ListPackagesRequest)(nil),       // 19: oculuxus.v1.ListPackagesRequest
-	(*ListPackagesResponse)(nil),      // 20: oculuxus.v1.ListPackagesResponse
-	(*Package)(nil),                   // 21: oculuxus.v1.Package
-	(*PackageOutlineRequest)(nil),     // 22: oculuxus.v1.PackageOutlineRequest
-	(*PackageOutlineResponse)(nil),    // 23: oculuxus.v1.PackageOutlineResponse
-	(*PackageOutline)(nil),            // 24: oculuxus.v1.PackageOutline
-	(*File)(nil),                      // 25: oculuxus.v1.File
-	(*Declaration)(nil),               // 26: oculuxus.v1.Declaration
-	(*Location)(nil),                  // 27: oculuxus.v1.Location
-	(*DeclarationSourceRequest)(nil),  // 28: oculuxus.v1.DeclarationSourceRequest
-	(*DeclarationSourceResponse)(nil), // 29: oculuxus.v1.DeclarationSourceResponse
-	(*FileSourceRequest)(nil),         // 30: oculuxus.v1.FileSourceRequest
-	(*FileSourceResponse)(nil),        // 31: oculuxus.v1.FileSourceResponse
-	(*DeclarationRange)(nil),          // 32: oculuxus.v1.DeclarationRange
-	(*Text)(nil),                      // 33: oculuxus.v1.Text
-	(*Range)(nil),                     // 34: oculuxus.v1.Range
-	(*Token)(nil),                     // 35: oculuxus.v1.Token
-	(*SymbolRef)(nil),                 // 36: oculuxus.v1.SymbolRef
-	(*ReloadRequest)(nil),             // 37: oculuxus.v1.ReloadRequest
-	(*ReloadResponse)(nil),            // 38: oculuxus.v1.ReloadResponse
-	(*SearchRequest)(nil),             // 39: oculuxus.v1.SearchRequest
-	(*SearchResponse)(nil),            // 40: oculuxus.v1.SearchResponse
-	(*SymbolMatch)(nil),               // 41: oculuxus.v1.SymbolMatch
-	(*SymbolIndex)(nil),               // 42: oculuxus.v1.SymbolIndex
-	(*IndexedPackage)(nil),            // 43: oculuxus.v1.IndexedPackage
-	(*IndexedSymbol)(nil),             // 44: oculuxus.v1.IndexedSymbol
+	(PackageOrigin)(0),                  // 0: oculuxus.v1.PackageOrigin
+	(SymbolKind)(0),                     // 1: oculuxus.v1.SymbolKind
+	(TokenType)(0),                      // 2: oculuxus.v1.TokenType
+	(TokenModifier)(0),                  // 3: oculuxus.v1.TokenModifier
+	(Error_Code)(0),                     // 4: oculuxus.v1.Error.Code
+	(CallHierarchyRequest_Direction)(0), // 5: oculuxus.v1.CallHierarchyRequest.Direction
+	(CallHierarchyItem_CallKind)(0),     // 6: oculuxus.v1.CallHierarchyItem.CallKind
+	(*Request)(nil),                     // 7: oculuxus.v1.Request
+	(*Response)(nil),                    // 8: oculuxus.v1.Response
+	(*Empty)(nil),                       // 9: oculuxus.v1.Empty
+	(*Cancel)(nil),                      // 10: oculuxus.v1.Cancel
+	(*Shutdown)(nil),                    // 11: oculuxus.v1.Shutdown
+	(*Error)(nil),                       // 12: oculuxus.v1.Error
+	(*Progress)(nil),                    // 13: oculuxus.v1.Progress
+	(*InfoRequest)(nil),                 // 14: oculuxus.v1.InfoRequest
+	(*InfoResponse)(nil),                // 15: oculuxus.v1.InfoResponse
+	(*OpenProjectRequest)(nil),          // 16: oculuxus.v1.OpenProjectRequest
+	(*OpenProjectResponse)(nil),         // 17: oculuxus.v1.OpenProjectResponse
+	(*Project)(nil),                     // 18: oculuxus.v1.Project
+	(*Module)(nil),                      // 19: oculuxus.v1.Module
+	(*CloseProjectRequest)(nil),         // 20: oculuxus.v1.CloseProjectRequest
+	(*ListPackagesRequest)(nil),         // 21: oculuxus.v1.ListPackagesRequest
+	(*ListPackagesResponse)(nil),        // 22: oculuxus.v1.ListPackagesResponse
+	(*Package)(nil),                     // 23: oculuxus.v1.Package
+	(*PackageOutlineRequest)(nil),       // 24: oculuxus.v1.PackageOutlineRequest
+	(*PackageOutlineResponse)(nil),      // 25: oculuxus.v1.PackageOutlineResponse
+	(*PackageOutline)(nil),              // 26: oculuxus.v1.PackageOutline
+	(*File)(nil),                        // 27: oculuxus.v1.File
+	(*Declaration)(nil),                 // 28: oculuxus.v1.Declaration
+	(*Location)(nil),                    // 29: oculuxus.v1.Location
+	(*DeclarationSourceRequest)(nil),    // 30: oculuxus.v1.DeclarationSourceRequest
+	(*DeclarationSourceResponse)(nil),   // 31: oculuxus.v1.DeclarationSourceResponse
+	(*FileSourceRequest)(nil),           // 32: oculuxus.v1.FileSourceRequest
+	(*FileSourceResponse)(nil),          // 33: oculuxus.v1.FileSourceResponse
+	(*DeclarationRange)(nil),            // 34: oculuxus.v1.DeclarationRange
+	(*Text)(nil),                        // 35: oculuxus.v1.Text
+	(*Range)(nil),                       // 36: oculuxus.v1.Range
+	(*Token)(nil),                       // 37: oculuxus.v1.Token
+	(*SymbolRef)(nil),                   // 38: oculuxus.v1.SymbolRef
+	(*ReloadRequest)(nil),               // 39: oculuxus.v1.ReloadRequest
+	(*ReloadResponse)(nil),              // 40: oculuxus.v1.ReloadResponse
+	(*SearchRequest)(nil),               // 41: oculuxus.v1.SearchRequest
+	(*SearchResponse)(nil),              // 42: oculuxus.v1.SearchResponse
+	(*SymbolMatch)(nil),                 // 43: oculuxus.v1.SymbolMatch
+	(*SymbolIndex)(nil),                 // 44: oculuxus.v1.SymbolIndex
+	(*IndexedPackage)(nil),              // 45: oculuxus.v1.IndexedPackage
+	(*IndexedSymbol)(nil),               // 46: oculuxus.v1.IndexedSymbol
+	(*Position)(nil),                    // 47: oculuxus.v1.Position
+	(*ReferencesRequest)(nil),           // 48: oculuxus.v1.ReferencesRequest
+	(*ReferencesResponse)(nil),          // 49: oculuxus.v1.ReferencesResponse
+	(*Reference)(nil),                   // 50: oculuxus.v1.Reference
+	(*CallHierarchyRequest)(nil),        // 51: oculuxus.v1.CallHierarchyRequest
+	(*CallHierarchyResponse)(nil),       // 52: oculuxus.v1.CallHierarchyResponse
+	(*CallHierarchyItem)(nil),           // 53: oculuxus.v1.CallHierarchyItem
+	(*HoverRequest)(nil),                // 54: oculuxus.v1.HoverRequest
+	(*HoverResponse)(nil),               // 55: oculuxus.v1.HoverResponse
+	(*Hover)(nil),                       // 56: oculuxus.v1.Hover
+	(*IndexedReferences)(nil),           // 57: oculuxus.v1.IndexedReferences
+	(*IndexedReference)(nil),            // 58: oculuxus.v1.IndexedReference
+	(*ReferenceIndex)(nil),              // 59: oculuxus.v1.ReferenceIndex
 }
 var file_oculuxus_v1_oculuxus_proto_depIdxs = []int32{
-	8,  // 0: oculuxus.v1.Request.cancel:type_name -> oculuxus.v1.Cancel
-	9,  // 1: oculuxus.v1.Request.shutdown:type_name -> oculuxus.v1.Shutdown
-	12, // 2: oculuxus.v1.Request.info:type_name -> oculuxus.v1.InfoRequest
-	14, // 3: oculuxus.v1.Request.open_project:type_name -> oculuxus.v1.OpenProjectRequest
-	18, // 4: oculuxus.v1.Request.close_project:type_name -> oculuxus.v1.CloseProjectRequest
-	19, // 5: oculuxus.v1.Request.list_packages:type_name -> oculuxus.v1.ListPackagesRequest
-	22, // 6: oculuxus.v1.Request.package_outline:type_name -> oculuxus.v1.PackageOutlineRequest
-	28, // 7: oculuxus.v1.Request.declaration_source:type_name -> oculuxus.v1.DeclarationSourceRequest
-	30, // 8: oculuxus.v1.Request.file_source:type_name -> oculuxus.v1.FileSourceRequest
-	37, // 9: oculuxus.v1.Request.reload:type_name -> oculuxus.v1.ReloadRequest
-	39, // 10: oculuxus.v1.Request.search:type_name -> oculuxus.v1.SearchRequest
-	10, // 11: oculuxus.v1.Response.error:type_name -> oculuxus.v1.Error
-	11, // 12: oculuxus.v1.Response.progress:type_name -> oculuxus.v1.Progress
-	7,  // 13: oculuxus.v1.Response.empty:type_name -> oculuxus.v1.Empty
-	13, // 14: oculuxus.v1.Response.info:type_name -> oculuxus.v1.InfoResponse
-	15, // 15: oculuxus.v1.Response.open_project:type_name -> oculuxus.v1.OpenProjectResponse
-	20, // 16: oculuxus.v1.Response.list_packages:type_name -> oculuxus.v1.ListPackagesResponse
-	23, // 17: oculuxus.v1.Response.package_outline:type_name -> oculuxus.v1.PackageOutlineResponse
-	29, // 18: oculuxus.v1.Response.declaration_source:type_name -> oculuxus.v1.DeclarationSourceResponse
-	31, // 19: oculuxus.v1.Response.file_source:type_name -> oculuxus.v1.FileSourceResponse
-	38, // 20: oculuxus.v1.Response.reload:type_name -> oculuxus.v1.ReloadResponse
-	40, // 21: oculuxus.v1.Response.search:type_name -> oculuxus.v1.SearchResponse
-	4,  // 22: oculuxus.v1.Error.code:type_name -> oculuxus.v1.Error.Code
-	16, // 23: oculuxus.v1.OpenProjectResponse.project:type_name -> oculuxus.v1.Project
-	17, // 24: oculuxus.v1.Project.modules:type_name -> oculuxus.v1.Module
-	21, // 25: oculuxus.v1.ListPackagesResponse.packages:type_name -> oculuxus.v1.Package
-	17, // 26: oculuxus.v1.ListPackagesResponse.modules:type_name -> oculuxus.v1.Module
-	0,  // 27: oculuxus.v1.Package.origin:type_name -> oculuxus.v1.PackageOrigin
-	24, // 28: oculuxus.v1.PackageOutlineResponse.outline:type_name -> oculuxus.v1.PackageOutline
-	25, // 29: oculuxus.v1.PackageOutline.files:type_name -> oculuxus.v1.File
-	26, // 30: oculuxus.v1.PackageOutline.declarations:type_name -> oculuxus.v1.Declaration
-	1,  // 31: oculuxus.v1.Declaration.kind:type_name -> oculuxus.v1.SymbolKind
-	33, // 32: oculuxus.v1.Declaration.signature:type_name -> oculuxus.v1.Text
-	27, // 33: oculuxus.v1.Declaration.location:type_name -> oculuxus.v1.Location
-	26, // 34: oculuxus.v1.Declaration.members:type_name -> oculuxus.v1.Declaration
-	33, // 35: oculuxus.v1.DeclarationSourceResponse.source:type_name -> oculuxus.v1.Text
-	27, // 36: oculuxus.v1.DeclarationSourceResponse.location:type_name -> oculuxus.v1.Location
-	33, // 37: oculuxus.v1.FileSourceResponse.source:type_name -> oculuxus.v1.Text
-	32, // 38: oculuxus.v1.FileSourceResponse.declarations:type_name -> oculuxus.v1.DeclarationRange
-	34, // 39: oculuxus.v1.DeclarationRange.range:type_name -> oculuxus.v1.Range
-	35, // 40: oculuxus.v1.Text.tokens:type_name -> oculuxus.v1.Token
-	34, // 41: oculuxus.v1.Token.range:type_name -> oculuxus.v1.Range
-	2,  // 42: oculuxus.v1.Token.type:type_name -> oculuxus.v1.TokenType
-	36, // 43: oculuxus.v1.Token.target:type_name -> oculuxus.v1.SymbolRef
-	41, // 44: oculuxus.v1.SearchResponse.matches:type_name -> oculuxus.v1.SymbolMatch
-	1,  // 45: oculuxus.v1.SymbolMatch.kind:type_name -> oculuxus.v1.SymbolKind
-	27, // 46: oculuxus.v1.SymbolMatch.location:type_name -> oculuxus.v1.Location
-	0,  // 47: oculuxus.v1.SymbolMatch.origin:type_name -> oculuxus.v1.PackageOrigin
-	34, // 48: oculuxus.v1.SymbolMatch.matched:type_name -> oculuxus.v1.Range
-	43, // 49: oculuxus.v1.SymbolIndex.packages:type_name -> oculuxus.v1.IndexedPackage
-	44, // 50: oculuxus.v1.IndexedPackage.symbols:type_name -> oculuxus.v1.IndexedSymbol
-	1,  // 51: oculuxus.v1.IndexedSymbol.kind:type_name -> oculuxus.v1.SymbolKind
-	52, // [52:52] is the sub-list for method output_type
-	52, // [52:52] is the sub-list for method input_type
-	52, // [52:52] is the sub-list for extension type_name
-	52, // [52:52] is the sub-list for extension extendee
-	0,  // [0:52] is the sub-list for field type_name
+	10, // 0: oculuxus.v1.Request.cancel:type_name -> oculuxus.v1.Cancel
+	11, // 1: oculuxus.v1.Request.shutdown:type_name -> oculuxus.v1.Shutdown
+	14, // 2: oculuxus.v1.Request.info:type_name -> oculuxus.v1.InfoRequest
+	16, // 3: oculuxus.v1.Request.open_project:type_name -> oculuxus.v1.OpenProjectRequest
+	20, // 4: oculuxus.v1.Request.close_project:type_name -> oculuxus.v1.CloseProjectRequest
+	21, // 5: oculuxus.v1.Request.list_packages:type_name -> oculuxus.v1.ListPackagesRequest
+	24, // 6: oculuxus.v1.Request.package_outline:type_name -> oculuxus.v1.PackageOutlineRequest
+	30, // 7: oculuxus.v1.Request.declaration_source:type_name -> oculuxus.v1.DeclarationSourceRequest
+	32, // 8: oculuxus.v1.Request.file_source:type_name -> oculuxus.v1.FileSourceRequest
+	39, // 9: oculuxus.v1.Request.reload:type_name -> oculuxus.v1.ReloadRequest
+	41, // 10: oculuxus.v1.Request.search:type_name -> oculuxus.v1.SearchRequest
+	48, // 11: oculuxus.v1.Request.references:type_name -> oculuxus.v1.ReferencesRequest
+	51, // 12: oculuxus.v1.Request.call_hierarchy:type_name -> oculuxus.v1.CallHierarchyRequest
+	54, // 13: oculuxus.v1.Request.hover:type_name -> oculuxus.v1.HoverRequest
+	12, // 14: oculuxus.v1.Response.error:type_name -> oculuxus.v1.Error
+	13, // 15: oculuxus.v1.Response.progress:type_name -> oculuxus.v1.Progress
+	9,  // 16: oculuxus.v1.Response.empty:type_name -> oculuxus.v1.Empty
+	15, // 17: oculuxus.v1.Response.info:type_name -> oculuxus.v1.InfoResponse
+	17, // 18: oculuxus.v1.Response.open_project:type_name -> oculuxus.v1.OpenProjectResponse
+	22, // 19: oculuxus.v1.Response.list_packages:type_name -> oculuxus.v1.ListPackagesResponse
+	25, // 20: oculuxus.v1.Response.package_outline:type_name -> oculuxus.v1.PackageOutlineResponse
+	31, // 21: oculuxus.v1.Response.declaration_source:type_name -> oculuxus.v1.DeclarationSourceResponse
+	33, // 22: oculuxus.v1.Response.file_source:type_name -> oculuxus.v1.FileSourceResponse
+	40, // 23: oculuxus.v1.Response.reload:type_name -> oculuxus.v1.ReloadResponse
+	42, // 24: oculuxus.v1.Response.search:type_name -> oculuxus.v1.SearchResponse
+	49, // 25: oculuxus.v1.Response.references:type_name -> oculuxus.v1.ReferencesResponse
+	52, // 26: oculuxus.v1.Response.call_hierarchy:type_name -> oculuxus.v1.CallHierarchyResponse
+	55, // 27: oculuxus.v1.Response.hover:type_name -> oculuxus.v1.HoverResponse
+	4,  // 28: oculuxus.v1.Error.code:type_name -> oculuxus.v1.Error.Code
+	18, // 29: oculuxus.v1.OpenProjectResponse.project:type_name -> oculuxus.v1.Project
+	19, // 30: oculuxus.v1.Project.modules:type_name -> oculuxus.v1.Module
+	23, // 31: oculuxus.v1.ListPackagesResponse.packages:type_name -> oculuxus.v1.Package
+	19, // 32: oculuxus.v1.ListPackagesResponse.modules:type_name -> oculuxus.v1.Module
+	0,  // 33: oculuxus.v1.Package.origin:type_name -> oculuxus.v1.PackageOrigin
+	26, // 34: oculuxus.v1.PackageOutlineResponse.outline:type_name -> oculuxus.v1.PackageOutline
+	27, // 35: oculuxus.v1.PackageOutline.files:type_name -> oculuxus.v1.File
+	28, // 36: oculuxus.v1.PackageOutline.declarations:type_name -> oculuxus.v1.Declaration
+	1,  // 37: oculuxus.v1.Declaration.kind:type_name -> oculuxus.v1.SymbolKind
+	35, // 38: oculuxus.v1.Declaration.signature:type_name -> oculuxus.v1.Text
+	29, // 39: oculuxus.v1.Declaration.location:type_name -> oculuxus.v1.Location
+	28, // 40: oculuxus.v1.Declaration.members:type_name -> oculuxus.v1.Declaration
+	35, // 41: oculuxus.v1.DeclarationSourceResponse.source:type_name -> oculuxus.v1.Text
+	29, // 42: oculuxus.v1.DeclarationSourceResponse.location:type_name -> oculuxus.v1.Location
+	35, // 43: oculuxus.v1.FileSourceResponse.source:type_name -> oculuxus.v1.Text
+	34, // 44: oculuxus.v1.FileSourceResponse.declarations:type_name -> oculuxus.v1.DeclarationRange
+	36, // 45: oculuxus.v1.DeclarationRange.range:type_name -> oculuxus.v1.Range
+	37, // 46: oculuxus.v1.Text.tokens:type_name -> oculuxus.v1.Token
+	36, // 47: oculuxus.v1.Token.range:type_name -> oculuxus.v1.Range
+	2,  // 48: oculuxus.v1.Token.type:type_name -> oculuxus.v1.TokenType
+	38, // 49: oculuxus.v1.Token.target:type_name -> oculuxus.v1.SymbolRef
+	43, // 50: oculuxus.v1.SearchResponse.matches:type_name -> oculuxus.v1.SymbolMatch
+	1,  // 51: oculuxus.v1.SymbolMatch.kind:type_name -> oculuxus.v1.SymbolKind
+	29, // 52: oculuxus.v1.SymbolMatch.location:type_name -> oculuxus.v1.Location
+	0,  // 53: oculuxus.v1.SymbolMatch.origin:type_name -> oculuxus.v1.PackageOrigin
+	36, // 54: oculuxus.v1.SymbolMatch.matched:type_name -> oculuxus.v1.Range
+	45, // 55: oculuxus.v1.SymbolIndex.packages:type_name -> oculuxus.v1.IndexedPackage
+	46, // 56: oculuxus.v1.IndexedPackage.symbols:type_name -> oculuxus.v1.IndexedSymbol
+	1,  // 57: oculuxus.v1.IndexedSymbol.kind:type_name -> oculuxus.v1.SymbolKind
+	38, // 58: oculuxus.v1.ReferencesRequest.symbol:type_name -> oculuxus.v1.SymbolRef
+	47, // 59: oculuxus.v1.ReferencesRequest.position:type_name -> oculuxus.v1.Position
+	38, // 60: oculuxus.v1.ReferencesResponse.symbol:type_name -> oculuxus.v1.SymbolRef
+	50, // 61: oculuxus.v1.ReferencesResponse.references:type_name -> oculuxus.v1.Reference
+	0,  // 62: oculuxus.v1.Reference.origin:type_name -> oculuxus.v1.PackageOrigin
+	29, // 63: oculuxus.v1.Reference.location:type_name -> oculuxus.v1.Location
+	36, // 64: oculuxus.v1.Reference.range:type_name -> oculuxus.v1.Range
+	38, // 65: oculuxus.v1.CallHierarchyRequest.symbol:type_name -> oculuxus.v1.SymbolRef
+	5,  // 66: oculuxus.v1.CallHierarchyRequest.direction:type_name -> oculuxus.v1.CallHierarchyRequest.Direction
+	53, // 67: oculuxus.v1.CallHierarchyResponse.items:type_name -> oculuxus.v1.CallHierarchyItem
+	38, // 68: oculuxus.v1.CallHierarchyItem.symbol:type_name -> oculuxus.v1.SymbolRef
+	0,  // 69: oculuxus.v1.CallHierarchyItem.origin:type_name -> oculuxus.v1.PackageOrigin
+	1,  // 70: oculuxus.v1.CallHierarchyItem.kind:type_name -> oculuxus.v1.SymbolKind
+	29, // 71: oculuxus.v1.CallHierarchyItem.location:type_name -> oculuxus.v1.Location
+	6,  // 72: oculuxus.v1.CallHierarchyItem.call_kind:type_name -> oculuxus.v1.CallHierarchyItem.CallKind
+	50, // 73: oculuxus.v1.CallHierarchyItem.sites:type_name -> oculuxus.v1.Reference
+	38, // 74: oculuxus.v1.HoverRequest.symbol:type_name -> oculuxus.v1.SymbolRef
+	47, // 75: oculuxus.v1.HoverRequest.position:type_name -> oculuxus.v1.Position
+	56, // 76: oculuxus.v1.HoverResponse.hover:type_name -> oculuxus.v1.Hover
+	35, // 77: oculuxus.v1.Hover.signature:type_name -> oculuxus.v1.Text
+	29, // 78: oculuxus.v1.Hover.location:type_name -> oculuxus.v1.Location
+	38, // 79: oculuxus.v1.Hover.target:type_name -> oculuxus.v1.SymbolRef
+	58, // 80: oculuxus.v1.IndexedReferences.references:type_name -> oculuxus.v1.IndexedReference
+	57, // 81: oculuxus.v1.ReferenceIndex.packages:type_name -> oculuxus.v1.IndexedReferences
+	82, // [82:82] is the sub-list for method output_type
+	82, // [82:82] is the sub-list for method input_type
+	82, // [82:82] is the sub-list for extension type_name
+	82, // [82:82] is the sub-list for extension extendee
+	0,  // [0:82] is the sub-list for field type_name
 }
 
 func init() { file_oculuxus_v1_oculuxus_proto_init() }
@@ -3633,6 +5177,9 @@ func file_oculuxus_v1_oculuxus_proto_init() {
 		(*Request_FileSource)(nil),
 		(*Request_Reload)(nil),
 		(*Request_Search)(nil),
+		(*Request_References)(nil),
+		(*Request_CallHierarchy)(nil),
+		(*Request_Hover)(nil),
 	}
 	file_oculuxus_v1_oculuxus_proto_msgTypes[1].OneofWrappers = []any{
 		(*Response_Error)(nil),
@@ -3646,14 +5193,25 @@ func file_oculuxus_v1_oculuxus_proto_init() {
 		(*Response_FileSource)(nil),
 		(*Response_Reload)(nil),
 		(*Response_Search)(nil),
+		(*Response_References)(nil),
+		(*Response_CallHierarchy)(nil),
+		(*Response_Hover)(nil),
+	}
+	file_oculuxus_v1_oculuxus_proto_msgTypes[41].OneofWrappers = []any{
+		(*ReferencesRequest_Symbol)(nil),
+		(*ReferencesRequest_Position)(nil),
+	}
+	file_oculuxus_v1_oculuxus_proto_msgTypes[47].OneofWrappers = []any{
+		(*HoverRequest_Symbol)(nil),
+		(*HoverRequest_Position)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_oculuxus_v1_oculuxus_proto_rawDesc), len(file_oculuxus_v1_oculuxus_proto_rawDesc)),
-			NumEnums:      5,
-			NumMessages:   40,
+			NumEnums:      7,
+			NumMessages:   53,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -282,6 +282,39 @@ func (h *Handler) handle(ctx context.Context, req *pb.Request, progress func(str
 		}
 		return &pb.Response{Body: &pb.Response_Search{Search: resp}}, nil
 
+	case *pb.Request_References:
+		p, err := h.current()
+		if err != nil {
+			return nil, err
+		}
+		resp, err := p.References(ctx, r.References, progress)
+		if err != nil {
+			return nil, err
+		}
+		return &pb.Response{Body: &pb.Response_References{References: resp}}, nil
+
+	case *pb.Request_CallHierarchy:
+		p, err := h.current()
+		if err != nil {
+			return nil, err
+		}
+		resp, err := p.CallHierarchy(ctx, r.CallHierarchy, progress)
+		if err != nil {
+			return nil, err
+		}
+		return &pb.Response{Body: &pb.Response_CallHierarchy{CallHierarchy: resp}}, nil
+
+	case *pb.Request_Hover:
+		p, err := h.current()
+		if err != nil {
+			return nil, err
+		}
+		resp, err := p.Hover(ctx, r.Hover)
+		if err != nil {
+			return nil, err
+		}
+		return &pb.Response{Body: &pb.Response_Hover{Hover: resp}}, nil
+
 	case *pb.Request_Shutdown, *pb.Request_Cancel:
 		return &pb.Response{Body: &pb.Response_Empty{Empty: &pb.Empty{}}}, nil
 	}
