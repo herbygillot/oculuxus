@@ -3,7 +3,7 @@ import XCTest
 
 /// Copies the helper's `simple` fixture to a temporary folder that tests
 /// may edit, and keeps the helper's index cache there too.
-private func makeScratchProject() throws -> URL {
+func makeScratchProject() throws -> URL {
     let tmp = FileManager.default.temporaryDirectory.appending(path: "oculuxus-tests-\(UUID().uuidString)")
     let project = tmp.appending(path: "simple")
     try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
@@ -12,7 +12,7 @@ private func makeScratchProject() throws -> URL {
     return project
 }
 
-private func requireHelper() throws -> URL {
+func requireHelper() throws -> URL {
     guard let helper = HelperEnvironment.helperURL() else {
         throw XCTSkip("bin/oculuxus-helper is not built; run `make build`")
     }
@@ -21,7 +21,7 @@ private func requireHelper() throws -> URL {
 
 /// Polls `condition` on the main actor until it holds or `timeout` passes.
 @MainActor
-private func waitUntil(timeout: Duration = .seconds(10), _ what: String, _ condition: () -> Bool) async throws {
+func waitUntil(timeout: Duration = .seconds(10), _ what: String, _ condition: () -> Bool) async throws {
     let deadline = ContinuousClock.now + timeout
     while !condition() {
         if ContinuousClock.now > deadline {

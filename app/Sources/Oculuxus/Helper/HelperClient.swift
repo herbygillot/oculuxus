@@ -326,4 +326,21 @@ extension HelperClient {
         guard case let .search(r) = try await request(.search(req), progress: progress) else { throw HelperError.unexpectedResponse }
         return r
     }
+
+    func references(_ req: OcxReferencesRequest, progress: ProgressHandler? = nil) async throws -> OcxReferencesResponse {
+        guard case let .references(r) = try await request(.references(req), progress: progress) else { throw HelperError.unexpectedResponse }
+        return r
+    }
+
+    func callHierarchy(_ req: OcxCallHierarchyRequest, progress: ProgressHandler? = nil) async throws -> OcxCallHierarchyResponse {
+        guard case let .callHierarchy(r) = try await request(.callHierarchy(req), progress: progress) else { throw HelperError.unexpectedResponse }
+        return r
+    }
+
+    /// The hover card for a declaration or a position; nil when there is
+    /// nothing to describe.
+    func hover(_ req: OcxHoverRequest) async throws -> OcxHover? {
+        guard case let .hover(r) = try await request(.hover(req)) else { throw HelperError.unexpectedResponse }
+        return r.hasHover ? r.hover : nil
+    }
 }

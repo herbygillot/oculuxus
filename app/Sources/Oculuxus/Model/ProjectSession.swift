@@ -30,12 +30,17 @@ final class ProjectSession {
     /// Bumped when the whole project is loaded again (for another target),
     /// which changes every package's revision.
     private(set) var generation = 0
+    /// Bumped after every reload, so views showing results that span
+    /// packages (references, callers) can ask again.
+    private(set) var reloads = 0
 
     @ObservationIgnored private var client: HelperClient?
     @ObservationIgnored private var connecting: Task<HelperClient, Error>?
     @ObservationIgnored private let outlines = RequestCache<PackageKey, OcxPackageOutline>()
     @ObservationIgnored private let declarationSources = RequestCache<DeclarationKey, OcxDeclarationSourceResponse>()
     @ObservationIgnored private let fileSources = RequestCache<FileKey, OcxFileSourceResponse>()
+    /// Hover cards by declaration.
+    @ObservationIgnored private let hovers = RequestCache<DeclarationKey, OcxHover?>()
     @ObservationIgnored private var watcher: ProjectWatcher?
     /// Changed files waiting for the reload in progress to finish.
     @ObservationIgnored private var reloadQueue: [String] = []
@@ -97,6 +102,7 @@ final class ProjectSession {
         outlines.invalidate { _ in true }
         declarationSources.invalidate { _ in true }
         fileSources.invalidate { _ in true }
+        hovers.invalidate { _ in true }
         generation += 1
         await open()
     }
@@ -190,12 +196,15 @@ final class ProjectSession {
                     outlines.invalidate { _ in true }
                     declarationSources.invalidate { _ in true }
                     fileSources.invalidate { _ in true }
+                    hovers.invalidate { _ in true }
                 } else {
                     outlines.invalidate { changed.contains($0.packageID) }
                     declarationSources.invalidate { changed.contains($0.packageID) }
                     fileSources.invalidate { changed.contains($0.packageID) }
+                    hovers.invalidate { changed.contains($0.packageID) }
                 }
                 for id in changed { revisions[id, default: 0] += 1 }
+                reloads += 1
             } catch {
                 // The helper stopped; the next request restarts it.
                 return
@@ -245,6 +254,45 @@ final class ProjectSession {
         request.includeDependencies = includeDependencies
         request.limit = UInt32(limit)
         return try await connect().search(request, progress: progress)
+    }
+
+    /// Every use of a declaration, or of the identifier at a position.
+    /// Without `wait` the results cover the project once it is indexed;
+    /// with it, everything in scope.
+    func references(_ request: OcxReferencesRequest, progress: HelperClient.ProgressHandler? = nil) async throws -> OcxReferencesResponse {
+        try await connect().references(request, progress: progress)
+    }
+
+    /// One level of callers or callees of a function or method.
+    func callHierarchy(_ symbol: OcxSymbolRef, direction: OcxCallHierarchyRequest.Direction, includeDependencies: Bool, wait: Bool = true, progress: HelperClient.ProgressHandler? = nil) async throws -> OcxCallHierarchyResponse {
+        var request = OcxCallHierarchyRequest()
+        request.symbol = symbol
+        request.direction = direction
+        request.includeDependencies = includeDependencies
+        request.wait = wait
+        return try await connect().callHierarchy(request, progress: progress)
+    }
+
+    /// The hover card for a declaration, cached until its package changes.
+    func hover(_ symbol: OcxSymbolRef, tests: Bool = false) async throws -> OcxHover? {
+        let key = DeclarationKey(packageID: symbol.packageID, declarationID: symbol.declarationID, tests: tests)
+        return try await hovers.value(for: key) { [self] in
+            var request = OcxHoverRequest()
+            request.symbol = symbol
+            request.includeTests = tests
+            return try await connect().hover(request)
+        }
+    }
+
+    /// The hover card for the identifier at a byte offset in a file of
+    /// `packageID`. Not cached: positions are only asked for identifiers
+    /// without a declaration to navigate to, such as locals.
+    func hover(at position: OcxPosition, packageID: String, tests: Bool = false) async throws -> OcxHover? {
+        var request = OcxHoverRequest()
+        request.position = position
+        request.packageID = packageID
+        request.includeTests = tests
+        return try await connect().hover(request)
     }
 }
 

@@ -35,7 +35,9 @@ enum CodeText {
         return NSRange(start..<end, in: string)
     }
 
-    static func attributed(_ text: OcxText, theme: CodeTheme, font: NSFont) -> NSMutableAttributedString {
+    /// With `markTokens`, identifiers carry a `SourceToken`, for hover
+    /// cards and Find References in the source viewer.
+    static func attributed(_ text: OcxText, theme: CodeTheme, font: NSFont, markTokens: Bool = false) -> NSMutableAttributedString {
         let result = NSMutableAttributedString(string: text.text, attributes: [
             .font: font,
             .foregroundColor: theme.text,
@@ -49,7 +51,44 @@ enum CodeText {
             if token.hasTarget, let url = url(for: token.target) {
                 result.addAttribute(.link, value: url, range: range)
             }
+            if markTokens, SourceToken.isIdentifier(token) {
+                result.addAttribute(.sourceToken, value: SourceToken(token), range: range)
+            }
         }
         return result
+    }
+}
+
+extension NSAttributedString.Key {
+    /// A `SourceToken` on the characters of an identifier.
+    static let sourceToken = NSAttributedString.Key("OculuxusSourceToken")
+}
+
+/// An identifier in source text: where it starts (a byte offset into the
+/// text, to make a Position from) and the declaration it refers to.
+final class SourceToken: NSObject {
+    let start: UInt32
+    let type: OcxTokenType
+    let target: OcxSymbolRef?
+
+    init(_ token: OcxToken) {
+        start = token.range.start
+        type = token.type
+        target = token.hasTarget ? token.target : nil
+    }
+
+    /// Calls of functions and methods have callers and callees.
+    var isCallable: Bool { type == .function || type == .methodName }
+
+    /// Names, not keywords, literals, operators or comments. A name in a
+    /// doc comment only counts when it links somewhere: there is nothing
+    /// to look up at its position.
+    static func isIdentifier(_ token: OcxToken) -> Bool {
+        switch token.type {
+        case .keyword, .comment, .string, .number, .operator, .unspecified, .UNRECOGNIZED:
+            return false
+        default:
+            return token.hasTarget || token.modifiers & UInt32(OcxTokenModifier.documentation.rawValue) == 0
+        }
     }
 }

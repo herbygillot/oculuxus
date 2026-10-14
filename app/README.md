@@ -25,6 +25,25 @@ module files change, asks the helper to reload them and refreshes open
 Workspaces in place. Code from `_test.go` files is hidden unless the Tests
 toolbar toggle (or View ▸ Show Code from Tests, ⇧⌘T) is on.
 
+Find References (Go ▸ Find References, ⇧⌘R, or right-click an identifier in
+the source or a declaration in the outline) opens a panel at the bottom of
+the Workspace with every use, grouped by package and file, one line each
+with the identifier highlighted; uses through an interface the method
+implements say "via" that interface. It covers the project; the
+Dependencies checkbox adds dependencies and the standard library. The app
+asks the helper once for what is indexed and shows it, then again, waiting,
+for the rest, with the helper's progress in the panel. For a function or
+method the panel also has Callers and Callees (Go ▸ Find Callers, ⌃⇧⌘H, and
+Find Callees), trees that load one level each time a row is expanded; calls
+through interfaces and function values are labelled. Clicking a row shows
+that line in the Workspace, ⌘-click in a new one; both go into history.
+From the menu, the panel follows the identifier at the source viewer's
+insertion point after a click there, and otherwise the selected
+declaration. Resting the pointer half a second on an identifier in the
+source, or on a reference in an outline signature, shows a hover card:
+kind, signature, package, doc comment and where it is defined. Cards are
+cached per declaration.
+
 Open in Editor (Go ▸ Open in Editor, ⇧⌘E, or the toolbar button) opens the
 shown declaration or file at its line in your editor; right-click a
 declaration, or a line in the source, to open that one. Pick the editor in
@@ -72,6 +91,9 @@ popover in a Workspace toolbar).
 `bin/oculuxus-helper` is missing. `SnapshotTests` renders the Navigator and a
 Workspace for a project into a PNG when `OCULUXUS_SNAPSHOT_DIR` is set
 (`OCULUXUS_SNAPSHOT_LAYOUT=flat` renders the flat Navigator).
+`ReferencesScreenshotTests` puts a Workspace on screen for `helper/`, opens
+the references panel on each tab and a hover card, and captures them with
+`screencapture` into `OCULUXUS_SCREENSHOT_DIR`.
 
 | Directory | What it is |
 | --- | --- |
@@ -80,5 +102,7 @@ Workspace for a project into a PNG when `OCULUXUS_SNAPSHOT_DIR` is set
 | `Navigator/` | The Navigator window: project picker, project packages, dependencies by module, the standard library, as a tree or a flat list (`PackageTree.swift`). |
 | `Workspace/` | Workspace windows: package content pane, source viewer (TextKit 2 `NSTextView`), history. |
 | `Search/` | The ⌘K panel and its model. |
+| `References/` | The references and call hierarchy panel and its model. |
+| `Hover/` | Hover cards and the presenter that shows and dismisses them. |
 | `Settings/` | Font, color scheme, Go binary, editor and recent projects, their popover, open panels, and Open in Editor (`Editor.swift`). |
 | `Bundle/` | `make app-bundle`: the bundle script, Info.plist template and icon drawing. |

@@ -163,7 +163,7 @@ private struct SymbolMatchRow: View {
     }
 }
 
-private struct KindBadge: View {
+struct KindBadge: View {
     var kind: OcxSymbolKind
 
     var body: some View {

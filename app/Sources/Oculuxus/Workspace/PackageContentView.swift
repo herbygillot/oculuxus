@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The package's doc comment and its declarations, signatures only,
@@ -13,6 +14,9 @@ struct PackageContentView: View {
     var openInEditor: (EditorTarget) -> Void
     /// A clickable target other than a declaration row was clicked.
     var targetClicked: () -> Void = {}
+    /// The pointer rests on a reference in a signature, at a rect on screen.
+    var hoverCard: (OcxSymbolRef, NSRect) -> Void = { _, _ in }
+    var findReferences: (OcxDeclaration, ReferencesTab) -> Void = { _, _ in }
 
     /// Section order: vars, consts, interfaces, structs, funcs, other types.
     private static let sections: [(String, OcxSymbolKind)] = [
@@ -79,7 +83,7 @@ struct PackageContentView: View {
     }
 
     private var rowContext: DeclarationView.Context {
-        .init(selectedID: selectedID, theme: theme, font: font, select: select, openInEditor: openInEditor, targetClicked: targetClicked)
+        .init(selectedID: selectedID, theme: theme, font: font, select: select, openInEditor: openInEditor, targetClicked: targetClicked, hoverCard: hoverCard, findReferences: findReferences)
     }
 
     private var header: some View {
@@ -149,6 +153,8 @@ struct DeclarationView: View {
         var select: (String) -> Void
         var openInEditor: (EditorTarget) -> Void
         var targetClicked: () -> Void
+        var hoverCard: (OcxSymbolRef, NSRect) -> Void
+        var findReferences: (OcxDeclaration, ReferencesTab) -> Void
     }
 
     var declaration: OcxDeclaration
@@ -212,12 +218,20 @@ private struct SignatureRow: View {
     var declaration: OcxDeclaration
     var context: DeclarationView.Context
     var depth: Int
+    /// The index of the token under the pointer.
+    @State private var hovered: Int?
 
     var body: some View {
         let selected = context.selectedID == declaration.id
         Text(signature)
             .tint(Color(nsColor: context.theme.color(for: .typeName)))
             .lineLimit(1)
+            .onContinuousHover(coordinateSpace: .local) { phase in
+                switch phase {
+                case let .active(point): pointer(at: point)
+                case .ended: endHover()
+                }
+            }
             .truncationMode(.tail)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 3)
@@ -227,13 +241,46 @@ private struct SignatureRow: View {
             .contentShape(Rectangle())
             .onTapGesture { context.select(declaration.id) }
             .contextMenu {
+                Button("Find References") { context.findReferences(declaration, .references) }
+                if declaration.kind == .func || declaration.kind == .method {
+                    Button("Find Callers") { context.findReferences(declaration, .callers) }
+                    Button("Find Callees") { context.findReferences(declaration, .callees) }
+                }
+                Divider()
                 Button("Open in Editor") {
                     context.openInEditor(EditorTarget(file: declaration.location.file, line: max(Int(declaration.location.line), 1)))
                 }
                 .disabled(declaration.location.file.isEmpty)
             }
-            .help(declaration.doc)
             .id(declaration.id)
+    }
+
+    /// Shows the hover card for the reference under the pointer. The card
+    /// is anchored to the token: its offset in the line is measured with
+    /// Core Text, which lays out the same attributed string as the row.
+    private func pointer(at point: CGPoint) {
+        let text = CodeText.attributed(declaration.signature, theme: context.theme, font: context.font)
+        let line = CTLineCreateWithAttributedString(text)
+        for (i, token) in declaration.signature.tokens.enumerated() where token.hasTarget {
+            guard let range = CodeText.nsRange(token.range, in: declaration.signature.text) else { continue }
+            let x0 = CTLineGetOffsetForStringIndex(line, range.location, nil)
+            let x1 = CTLineGetOffsetForStringIndex(line, NSMaxRange(range), nil)
+            guard point.x >= x0, point.x < x1 else { continue }
+            if hovered == i { return }
+            hovered = i
+            let mouse = NSEvent.mouseLocation
+            let height = NSLayoutManager().defaultLineHeight(for: context.font)
+            let rect = NSRect(x: mouse.x - (point.x - x0), y: mouse.y + point.y - height, width: x1 - x0, height: height)
+            context.hoverCard(token.target, rect)
+            return
+        }
+        endHover()
+    }
+
+    private func endHover() {
+        guard hovered != nil else { return }
+        hovered = nil
+        HoverCardPresenter.shared.leave()
     }
 
     private var signature: AttributedString {
