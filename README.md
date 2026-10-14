@@ -16,10 +16,10 @@ document for the design.
 ## Building the app
 
 ```sh
-make app-bundle
+make
 ```
 
-builds `dist/Oculuxus.app`: a release build of the app with the helper
+(or `make all`, or `make app-bundle`) builds `dist/Oculuxus.app`: a release build of the app with the helper
 inside it at `Contents/MacOS/oculuxus-helper`, an Info.plist, an icon drawn
 by `app/Bundle/make-icon.swift`, and an ad-hoc signature. Both executables
 are universal (arm64 and x86_64); `ARCHS=arm64 make app-bundle` builds one
@@ -29,7 +29,8 @@ Finder or with `open dist/Oculuxus.app`; it needs a Go toolchain on the Mac
 to analyze projects, and finds it as described in
 [app/README.md](app/README.md). The ad-hoc signature is enough to run the
 app on the Mac that built it; giving it to others needs a Developer ID
-signature and notarization.
+signature and notarization. `make clean` removes everything the build
+made: `bin/`, `dist/` and `app/.build`.
 
 For development, `make build && make app-run` runs the app from the
 command line with the helper from `bin/`.

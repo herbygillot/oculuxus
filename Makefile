@@ -1,6 +1,14 @@
 GOBIN ?= $(shell go env GOPATH)/bin
 
-.PHONY: generate lint build test tools
+.PHONY: all clean generate lint build test tools
+
+# The default: dist/Oculuxus.app, the whole app with the helper inside.
+all: app-bundle
+
+# Removes everything the build makes: the development helper in bin/, the
+# app bundle in dist/ and SwiftPM's build directory.
+clean:
+	rm -rf bin dist app/.build
 
 tools:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
