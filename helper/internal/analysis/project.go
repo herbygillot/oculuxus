@@ -183,7 +183,37 @@ func Open(ctx context.Context, tc *Toolchain, root string, target Target) (*Proj
 		return nil, &Error{Code: pb.Error_LOAD_FAILED, Err: errors.New("go list -m found no modules")}
 	}
 	p.index = newSymbolIndex(indexCachePath(abs), strings.Join([]string{tc.GoVersion, target.GOOS, target.GOARCH, strings.Join(p.buildFlags, " ")}, " "))
+	p.index.load = p.loadForIndex
 	return p, nil
+}
+
+// loadForIndex type-checks packages for the reference index. Packages
+// already type-checked for an outline are reused; the rest load together.
+func (p *Project) loadForIndex(ctx context.Context, ids []string) ([]*packages.Package, error) {
+	var out []*packages.Package
+	var missing []string
+	p.mu.Lock()
+	for _, id := range ids {
+		if tp, ok := p.typed[id]; ok {
+			out = append(out, tp.pkg)
+		} else {
+			missing = append(missing, id)
+		}
+	}
+	p.mu.Unlock()
+	if len(missing) == 0 {
+		return out, nil
+	}
+	pkgs, err := packages.Load(p.config(ctx, typedMode), missing...)
+	if err != nil {
+		return out, err
+	}
+	for _, pkg := range pkgs {
+		if !isTestVariant(pkg) && pkg.TypesInfo != nil {
+			out = append(out, pkg)
+		}
+	}
+	return out, nil
 }
 
 // Close stops background work: the symbol index build.

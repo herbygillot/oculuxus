@@ -137,7 +137,13 @@ func (tp *typedPackage) fieldRefFor(id *ast.Ident, v *types.Var) *pb.SymbolRef {
 	if sel, ok := tp.selections[id]; ok {
 		return fieldRef(sel)
 	}
-	return nil
+	// A composite literal key, T{f: v}: find the struct that declares f.
+	tp.fieldsMu.Lock()
+	defer tp.fieldsMu.Unlock()
+	if tp.fields == nil {
+		tp.fields = newFieldOwners()
+	}
+	return tp.fields.ref(v)
 }
 
 func (tp *typedPackage) isParam(v *types.Var) bool {

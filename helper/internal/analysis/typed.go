@@ -38,6 +38,9 @@ type typedPackage struct {
 
 	selections  map[*ast.Ident]*types.Selection // selector identifiers
 	paramScopes map[*types.Scope]*ast.FuncType  // function scopes by signature
+
+	fieldsMu sync.Mutex
+	fields   *fieldOwners // struct fields by object, for composite literal keys
 }
 
 // declNode is a declaration found in the syntax.
@@ -479,8 +482,12 @@ func fieldRef(sel *types.Selection) *pb.SymbolRef {
 	var owner *types.Named
 	for i, fi := range idx {
 		named := namedOf(t)
-		st, ok := namedOf(t).Underlying().(*types.Struct)
-		if named == nil || !ok {
+		var st *types.Struct
+		var ok bool
+		if named != nil {
+			st, ok = named.Underlying().(*types.Struct)
+		}
+		if !ok {
 			st, ok = derefType(t).Underlying().(*types.Struct)
 			if !ok {
 				return nil
