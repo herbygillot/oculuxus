@@ -12,7 +12,8 @@ import XCTest
 ///
 /// OCULUXUS_SNAPSHOT_TESTS=1 shows test code; OCULUXUS_SNAPSHOT_SEARCH=query
 /// also renders the ⌘K panel for the query. OCULUXUS_SNAPSHOT_LAYOUT=flat
-/// (or tree) picks the Navigator layout.
+/// (or tree) picks the Navigator layout. OCULUXUS_SNAPSHOT_DOCS=none, full
+/// or firstSentence picks how much of each doc comment is shown.
 @MainActor
 final class SnapshotTests: XCTestCase {
     func testRenderProject() async throws {
@@ -23,6 +24,7 @@ final class SnapshotTests: XCTestCase {
         let state = AppState()
         state.settings.showsTests = env["OCULUXUS_SNAPSHOT_TESTS"] != nil
         state.settings.navigatorLayout = env["OCULUXUS_SNAPSHOT_LAYOUT"].flatMap(NavigatorLayout.init(rawValue:)) ?? .tree
+        state.settings.docDisplay = env["OCULUXUS_SNAPSHOT_DOCS"].flatMap(DocDisplay.init(rawValue:)) ?? .firstSentence
         await state.openProject(project, openWindow: nil)
         let session = try XCTUnwrap(state.session)
         XCTAssertEqual(session.status, .ready)

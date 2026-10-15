@@ -79,6 +79,9 @@ final class AppSettings {
     var goBinary: String? { didSet { save() } }
     /// Show declarations from _test.go files in Workspaces.
     var showsTests: Bool { didSet { save() } }
+    /// How much of each declaration's doc comment the package content
+    /// pane shows.
+    var docDisplay: DocDisplay { didSet { save() } }
     /// ⌘K searches dependencies and the standard library as well.
     var searchesDependencies: Bool { didSet { save() } }
     /// The Navigator lists packages as a tree or a flat list.
@@ -110,6 +113,7 @@ final class AppSettings {
         goBinary = defaults.string(forKey: "goBinary")
         recentProjects = defaults.stringArray(forKey: "recentProjects") ?? []
         showsTests = defaults.bool(forKey: "showsTests")
+        docDisplay = defaults.string(forKey: "docDisplay").flatMap(DocDisplay.init(rawValue:)) ?? .firstSentence
         searchesDependencies = defaults.object(forKey: "searchesDependencies") as? Bool ?? true
         navigatorLayout = defaults.string(forKey: "navigatorLayout").flatMap(NavigatorLayout.init(rawValue:)) ?? .tree
         editor = defaults.string(forKey: "editor").flatMap(EditorChoice.init(rawValue:)) ?? .automatic
@@ -159,6 +163,7 @@ final class AppSettings {
         defaults.set(goBinary, forKey: "goBinary")
         defaults.set(recentProjects, forKey: "recentProjects")
         defaults.set(showsTests, forKey: "showsTests")
+        defaults.set(docDisplay.rawValue, forKey: "docDisplay")
         defaults.set(searchesDependencies, forKey: "searchesDependencies")
         defaults.set(navigatorLayout.rawValue, forKey: "navigatorLayout")
         defaults.set(editor.rawValue, forKey: "editor")

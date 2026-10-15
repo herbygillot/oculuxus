@@ -90,7 +90,12 @@ struct WorkspaceView: View {
     var body: some View {
         Group {
             if let session = state.session, let location = workspace.location {
-                PackagePanes(session: session, workspace: workspace, location: location, open: open)
+                VStack(spacing: 0) {
+                    PackagePanes(session: session, workspace: workspace, location: location, open: open)
+                    if let references = workspace.references {
+                        ReferencesPanel(model: references, theme: state.settings.theme, font: state.settings.font, open: open, close: workspace.closeReferences)
+                    }
+                }
             } else {
                 ContentUnavailableView("No Package", systemImage: "shippingbox", description: Text("Pick a package in the Navigator."))
             }
@@ -213,6 +218,7 @@ private struct PackagePanes: View {
                         selectedID: location.declarationID,
                         theme: settings.theme,
                         font: settings.font,
+                        docDisplay: settings.docDisplay,
                         select: {
                             workspace.select($0)
                             workspace.declarationClicked()
@@ -227,7 +233,12 @@ private struct PackagePanes: View {
                             open(location, newWindow)
                         },
                         openInEditor: { EditorLauncher.open($0, settings: settings) },
-                        targetClicked: workspace.targetClicked
+                        targetClicked: workspace.targetClicked,
+                        hoverCard: { symbol, rect in showHoverCard(symbol, rect) },
+                        findReferences: { declaration, tab in
+                            let subject = ReferenceSubject(symbol: OcxSymbolRef(packageID: outline.packageID, declarationID: declaration.id), name: declaration.name, tests: tests)
+                            workspace.showReferences(subject, tab: tab, session: session)
+                        }
                     )
                 }
             }
@@ -242,6 +253,7 @@ private struct PackagePanes: View {
                 open: open
             )
         }
+        .onChange(of: session.reloads) { workspace.references?.refresh() }
         .task(id: OutlineRequest(packageID: location.packageID, tests: tests, revision: session.revision(of: location.packageID))) {
             // Keep showing the current outline while the same package reloads.
             if outline.value?.packageID != location.packageID { outline = .loading }
@@ -252,6 +264,26 @@ private struct PackagePanes: View {
                 outline = .failed(error.localizedDescription)
             }
         }
+    }
+}
+
+extension PackagePanes {
+    /// Shows the hover card for a declaration from an outline signature.
+    private func showHoverCard(_ symbol: OcxSymbolRef, _ rect: NSRect) {
+        guard let window = workspace.window else { return }
+        let session = session
+        let tests = session.includesTests(symbol.packageID, showsTests: state.settings.showsTests)
+        HoverCardPresenter.shared.hover(
+            key: "outline:\(symbol.packageID)#\(symbol.declarationID)@\(rect.origin.x),\(rect.origin.y)",
+            anchor: rect,
+            window: window,
+            load: { try? await session.hover(symbol, tests: tests) },
+            content: hoverCard
+        )
+    }
+
+    private func hoverCard(_ hover: OcxHover, dismiss: @escaping () -> Void) -> HoverCardView {
+        HoverCardView(hover: hover, theme: state.settings.theme, font: state.settings.font, open: open, dismiss: dismiss)
     }
 }
 
@@ -273,6 +305,8 @@ private struct SourcePane: View {
         var source: OcxFileSourceResponse
         var file: String
         var line: UInt32
+        /// The byte offset of the text in its file.
+        var fileOffset: UInt32 = 0
         /// The declaration or file shown, the same across reloads.
         var document: String
     }
@@ -307,6 +341,7 @@ private struct SourcePane: View {
                     file: shown?.source,
                     document: shown?.document,
                     highlightedDeclarationID: request?.file != nil ? location.declarationID : nil,
+                    selectedLine: selectedLine,
                     theme: settings.theme,
                     font: settings.font,
                     firstLine: shown.map { EditorTarget(file: $0.file, line: max(Int($0.line), 1)) },
@@ -315,7 +350,8 @@ private struct SourcePane: View {
                         open(location, newWindow)
                     },
                     openInEditor: { EditorLauncher.open($0, settings: settings) },
-                    linkDoubleClicked: workspace.targetClicked
+                    linkDoubleClicked: workspace.targetClicked,
+                    tokenActions: tokenActions
                 )
             }
         }
@@ -355,6 +391,7 @@ private struct SourcePane: View {
     /// whole file the selected declaration when it is in that file.
     private var editorTarget: EditorTarget? {
         guard let shown else { return nil }
+        if let line = location.line, location.file == shown.file { return EditorTarget(file: shown.file, line: line) }
         if shown.line > 0 { return EditorTarget(file: shown.file, line: Int(shown.line)) }
         if let outline, let id = location.declarationID, let decl = find(id, in: outline.declarations), decl.location.file == shown.file {
             return EditorTarget(file: shown.file, line: max(Int(decl.location.line), 1))
@@ -378,7 +415,7 @@ private struct SourcePane: View {
             return Request(packageID: location.packageID, declarationID: declaration.id, tests: tests, revision: revision)
         }
         let picked = pickedFile.flatMap { path in outline.files.contains { $0.path == path } ? path : nil }
-        guard let file = picked ?? declaration?.location.file ?? outline.files.first?.path else { return nil }
+        guard let file = picked ?? location.file ?? declaration?.location.file ?? outline.files.first?.path else { return nil }
         return Request(packageID: location.packageID, file: file, tests: tests, revision: revision)
     }
 
@@ -395,14 +432,82 @@ private struct SourcePane: View {
                 shown = Shown(source: source, file: file, line: 0, document: request.document)
             } else {
                 let decl = try await session.declarationSource(WorkspaceLocation(packageID: request.packageID, declarationID: request.declarationID), tests: request.tests)
-                var source = OcxFileSourceResponse()
-                source.source = decl.source
-                shown = Shown(source: source, file: decl.location.file, line: decl.location.line, document: request.document)
+                if let file = location.file, let line = location.line, !Self.contains(decl, file: file, line: line) {
+                    // A reference outside the declaration: show its file.
+                    let source = try await session.fileSource(packageID: request.packageID, file: file, tests: request.tests)
+                    shown = Shown(source: source, file: file, line: 0, document: file)
+                } else {
+                    var source = OcxFileSourceResponse()
+                    source.source = decl.source
+                    shown = Shown(source: source, file: decl.location.file, line: decl.location.line, fileOffset: decl.fileOffset, document: request.document)
+                }
             }
             error = nil
         } catch is CancellationError {
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+
+    /// Whether a declaration's source contains a line of `file`.
+    static func contains(_ decl: OcxDeclarationSourceResponse, file: String, line: Int) -> Bool {
+        guard decl.location.file == file else { return false }
+        let first = Int(decl.location.line)
+        let lines = decl.source.text.reduce(1) { $1 == "\n" ? $0 + 1 : $0 }
+        return line >= first && line < first + lines
+    }
+
+    /// The reference's line within the shown text.
+    private var selectedLine: Int? {
+        guard let shown, let line = location.line, location.file == shown.file else { return nil }
+        return shown.line > 0 ? line - Int(shown.line) + 1 : line
+    }
+
+    private var tokenActions: SourceTokenActions {
+        SourceTokenActions(
+            hover: { token, name, rect, view in showHoverCard(token, name: name, rect: rect, view: view) },
+            endHover: { token in HoverCardPresenter.shared.leave(ObjectIdentifier(token)) },
+            find: { token, name, tab in
+                guard let subject = subject(for: token, name: name) else { return }
+                workspace.showReferences(subject, tab: tab, session: session)
+            },
+            register: { tokenAtInsertionPoint in
+                workspace.sourceSubject = { [self] in
+                    tokenAtInsertionPoint().flatMap { subject(for: $0.0, name: $0.1) }
+                }
+            }
+        )
+    }
+
+    /// The declaration a token refers to, or its position for a local.
+    private func subject(for token: SourceToken, name: String) -> ReferenceSubject? {
+        guard let shown else { return nil }
+        if let target = token.target, !target.declarationID.isEmpty {
+            return ReferenceSubject(symbol: target, name: name, tests: session.includesTests(target.packageID, showsTests: state.settings.showsTests))
+        }
+        var position = OcxPosition()
+        position.file = shown.file
+        position.offset = shown.fileOffset + token.start
+        return ReferenceSubject(position: position, packageID: location.packageID, name: name, tests: tests)
+    }
+
+    private func showHoverCard(_ token: SourceToken, name: String, rect: NSRect, view: NSView) {
+        guard let window = view.window, let subject = subject(for: token, name: name) else { return }
+        let session = session
+        // A package name or a declaration: by reference, cached; anything
+        // else by its position.
+        let load: @MainActor () async -> OcxHover?
+        if let target = token.target {
+            let tests = session.includesTests(target.packageID, showsTests: state.settings.showsTests)
+            load = { try? await session.hover(target, tests: tests) }
+        } else if let position = subject.position {
+            load = { try? await session.hover(at: position, packageID: subject.packageID, tests: subject.tests) }
+        } else {
+            return
+        }
+        let settings = state.settings
+        HoverCardPresenter.shared.hover(key: ObjectIdentifier(token), anchor: rect, window: window, load: load) { hover, dismiss in
+            HoverCardView(hover: hover, theme: settings.theme, font: settings.font, open: open, dismiss: dismiss)
         }
     }
 

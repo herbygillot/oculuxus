@@ -85,6 +85,19 @@ struct GoCommands: Commands {
             .keyboardShortcut("e", modifiers: [.command, .shift])
             .disabled(workspace?.editorTarget == nil)
             Divider()
+            Button("Find References") { find(.references) }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(!canFind)
+            Button("Find Callers") { find(.callers) }
+                .keyboardShortcut("h", modifiers: [.command, .control, .shift])
+                .disabled(!canFind)
+            Button("Find Callees") { find(.callees) }
+                .disabled(!canFind)
+            Button(workspace?.references == nil ? "Show References Panel" : "Hide References Panel") {
+                if workspace?.references != nil { workspace?.closeReferences() } else { find(.references) }
+            }
+            .disabled(workspace == nil)
+            Divider()
             Button("Back") { workspace?.goBack() }
                 .keyboardShortcut("[", modifiers: .command)
                 .disabled(!(workspace?.canGoBack ?? false))
@@ -95,6 +108,24 @@ struct GoCommands: Commands {
     }
 }
 
+extension GoCommands {
+    private var canFind: Bool {
+        workspace?.location != nil && state.session?.status == .ready
+    }
+
+    /// Finds references to, or callers or callees of, the identifier at
+    /// the source viewer's insertion point or the selected declaration.
+    private func find(_ tab: ReferencesTab) {
+        guard let workspace, let session = state.session, let location = workspace.location,
+              let subject = workspace.currentSubject(tests: session.includesTests(location.packageID, showsTests: state.settings.showsTests))
+        else {
+            NSSound.beep()
+            return
+        }
+        workspace.showReferences(subject, tab: tab, session: session)
+    }
+}
+
 struct ViewCommands: Commands {
     @Bindable var settings: AppSettings
 
@@ -102,6 +133,9 @@ struct ViewCommands: Commands {
         CommandGroup(after: .toolbar) {
             Toggle("Show Code from Tests", isOn: $settings.showsTests)
                 .keyboardShortcut("t", modifiers: [.command, .shift])
+            Picker("Documentation", selection: $settings.docDisplay) {
+                ForEach(DocDisplay.allCases) { Text($0.title).tag($0) }
+            }
             Picker("Show Packages", selection: $settings.navigatorLayout) {
                 Text("Packages as Tree").tag(NavigatorLayout.tree)
                     .keyboardShortcut("1", modifiers: [.command, .control])

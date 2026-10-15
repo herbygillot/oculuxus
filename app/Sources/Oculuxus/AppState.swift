@@ -3,10 +3,14 @@ import Observation
 import SwiftUI
 
 /// Where a Workspace is looking: a package, and optionally one of its
-/// declarations.
+/// declarations. A reference or a call site adds a file and line, which
+/// the source viewer shows selected, in the declaration when it contains
+/// the line and in the whole file otherwise.
 struct WorkspaceLocation: Hashable, Codable {
     var packageID: String
     var declarationID: String?
+    var file: String?
+    var line: Int?
 }
 
 /// One Workspace window: a package content pane and a source viewer, with
@@ -28,6 +32,11 @@ final class WorkspaceModel: Identifiable {
     var isClosed = false
     /// How the panes share the width.
     var split = WorkspaceSplitLayout()
+    /// The references and call hierarchy panel at the bottom, once opened.
+    var references: ReferencesModel?
+    /// The identifier at the source viewer's insertion point, when the
+    /// source viewer has focus; set by the source viewer.
+    @ObservationIgnored var sourceSubject: (() -> ReferenceSubject?)?
     /// A press that has not resized the panes yet: an outline click, or a
     /// double-click in either pane, which waits until clickable targets
     /// under it have had their say.
@@ -37,6 +46,9 @@ final class WorkspaceModel: Identifiable {
         var double: Bool
     }
 
+    /// The pane last pressed in: Find References uses the source viewer's
+    /// insertion point only after a press there.
+    @ObservationIgnored private(set) var lastPane: WorkspacePane?
     @ObservationIgnored private var clicks = 0
     @ObservationIgnored private var pending: PendingClick?
 
@@ -62,6 +74,7 @@ final class WorkspaceModel: Identifiable {
     func paneClicked(_ pane: WorkspacePane, _ phase: MousePhase, clicks count: Int = 1) {
         switch phase {
         case .down:
+            lastPane = pane
             pending = nil
             if pane == .source, count < 2 {
                 widen(.source)
@@ -133,6 +146,8 @@ final class WorkspaceModel: Identifiable {
     func select(_ declarationID: String?) {
         guard var location else { return }
         location.declarationID = declarationID
+        location.file = nil
+        location.line = nil
         history[index] = location
     }
 
@@ -143,6 +158,33 @@ final class WorkspaceModel: Identifiable {
     func reset() {
         history = []
         index = -1
+        references?.cancel()
+        references = nil
+    }
+
+    /// What Find References applies to: the identifier at the insertion
+    /// point in the source viewer, or the selected declaration.
+    func currentSubject(tests: Bool) -> ReferenceSubject? {
+        if lastPane == .source, let subject = sourceSubject?() { return subject }
+        guard let location, let id = location.declarationID else { return nil }
+        return ReferenceSubject(symbol: OcxSymbolRef(packageID: location.packageID, declarationID: id), name: id, tests: tests)
+    }
+
+    /// Opens the panel on `subject`'s references, callers or callees.
+    func showReferences(_ subject: ReferenceSubject, tab: ReferencesTab = .references, session: ProjectSession) {
+        if let references, references.session === session {
+            references.show(subject, tab: tab)
+        } else {
+            references?.cancel()
+            let model = ReferencesModel(session: session)
+            model.show(subject, tab: tab)
+            references = model
+        }
+    }
+
+    func closeReferences() {
+        references?.cancel()
+        references = nil
     }
 }
 
