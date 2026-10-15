@@ -74,20 +74,19 @@ final class SidebarTests: XCTestCase {
         let sidebar = collapsedSidebar()
         sidebar.hoverButton(true)
         XCTAssertEqual(sidebar.peek, .pending)
-        try await Task.sleep(for: .milliseconds(80))
+        await sidebar.awaitTimer()
         XCTAssertEqual(sidebar.peek, .shown)
 
         // Moving from the button onto the Navigator keeps it.
         sidebar.hoverButton(false)
-        try await Task.sleep(for: .milliseconds(10))
         sidebar.hoverPeek(true)
-        try await Task.sleep(for: .milliseconds(80))
+        await sidebar.awaitTimer()
         XCTAssertTrue(sidebar.isPeeking)
 
         // Leaving both hides it after the grace period.
         sidebar.hoverPeek(false)
         XCTAssertTrue(sidebar.isPeeking)
-        try await Task.sleep(for: .milliseconds(80))
+        await sidebar.awaitTimer()
         XCTAssertEqual(sidebar.peek, .hidden)
         XCTAssertTrue(sidebar.isCollapsed)
     }
@@ -96,14 +95,14 @@ final class SidebarTests: XCTestCase {
         let sidebar = collapsedSidebar()
         sidebar.hoverButton(true)
         sidebar.hoverButton(false)
-        try await Task.sleep(for: .milliseconds(80))
+        await sidebar.awaitTimer()
         XCTAssertEqual(sidebar.peek, .hidden)
     }
 
     func testPickOrEscapeEndsPeek() async throws {
         let sidebar = collapsedSidebar()
         sidebar.hoverButton(true)
-        try await Task.sleep(for: .milliseconds(80))
+        await sidebar.awaitTimer()
         sidebar.hoverButton(false)
         sidebar.hoverPeek(true)
         sidebar.dismissPeek()
@@ -114,7 +113,7 @@ final class SidebarTests: XCTestCase {
     func testClickWhilePeekingPins() async throws {
         let sidebar = collapsedSidebar()
         sidebar.hoverButton(true)
-        try await Task.sleep(for: .milliseconds(80))
+        await sidebar.awaitTimer()
         XCTAssertTrue(sidebar.isPeeking)
         sidebar.toggle()
         XCTAssertFalse(sidebar.isCollapsed)
@@ -124,11 +123,11 @@ final class SidebarTests: XCTestCase {
         // until the pointer leaves and comes back.
         sidebar.toggle()
         XCTAssertTrue(sidebar.isCollapsed)
-        try await Task.sleep(for: .milliseconds(80))
+        await sidebar.awaitTimer()
         XCTAssertEqual(sidebar.peek, .hidden)
         sidebar.hoverButton(false)
         sidebar.hoverButton(true)
-        try await Task.sleep(for: .milliseconds(80))
+        await sidebar.awaitTimer()
         XCTAssertTrue(sidebar.isPeeking)
     }
 
@@ -136,7 +135,7 @@ final class SidebarTests: XCTestCase {
         let sidebar = NavigatorSidebar()
         sidebar.showDelay = .milliseconds(10)
         sidebar.hoverButton(true)
-        try await Task.sleep(for: .milliseconds(50))
+        await sidebar.awaitTimer()
         XCTAssertEqual(sidebar.peek, .hidden)
     }
 
