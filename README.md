@@ -114,6 +114,12 @@ the app would receive as JSON; see [helper/README.md](helper/README.md).
 | [`helper/`](helper/) | The Go helper, a Go module. |
 | [`proto/`](proto/) | The app ↔ helper protocol schema. |
 
+## How it was built
+
+Oculuxus has been built mostly by AI. Most of its code, tests and
+documentation were written by Claude, Anthropic's AI model, working from
+design decisions, direction and review by the project's author.
+
 ## License
 
 Oculuxus is released under the [MIT License](LICENSE).
