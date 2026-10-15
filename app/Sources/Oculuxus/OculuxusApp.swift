@@ -7,17 +7,6 @@ struct OculuxusApp: App {
     @State private var state = AppState()
 
     var body: some Scene {
-        Window("Navigator", id: WindowID.navigator) {
-            NavigatorWindow()
-                .environment(state)
-        }
-        .defaultSize(width: 320, height: 700)
-        .commands {
-            ProjectCommands(state: state)
-            GoCommands(state: state)
-            ViewCommands(settings: state.settings)
-        }
-
         WindowGroup("Workspace", id: WindowID.workspace, for: UUID.self) { $id in
             WorkspaceWindow(id: id)
                 .environment(state)
@@ -25,6 +14,11 @@ struct OculuxusApp: App {
             UUID()
         }
         .defaultSize(width: 1000, height: 700)
+        .commands {
+            ProjectCommands(state: state)
+            GoCommands(state: state)
+            ViewCommands(settings: state.settings)
+        }
     }
 }
 
@@ -65,6 +59,14 @@ struct ProjectCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("Open Folder…") { state.chooseProject(openWindow: openWindow) }
                 .keyboardShortcut("o", modifiers: .command)
+            Menu("Open Recent") {
+                ForEach(state.settings.recentProjects, id: \.self) { dir in
+                    Button((dir as NSString).abbreviatingWithTildeInPath) {
+                        Task { await state.openProject(dir, openWindow: openWindow) }
+                    }
+                }
+            }
+            .disabled(state.settings.recentProjects.isEmpty)
         }
     }
 }
@@ -128,8 +130,16 @@ extension GoCommands {
 
 struct ViewCommands: Commands {
     @Bindable var settings: AppSettings
+    @FocusedValue(\.workspace) private var workspace
 
     var body: some Commands {
+        CommandGroup(replacing: .sidebar) {
+            Button(workspace?.sidebar.isCollapsed ?? false ? "Show Navigator" : "Hide Navigator") {
+                workspace?.sidebar.toggle()
+            }
+            .keyboardShortcut("s", modifiers: [.command, .control])
+            .disabled(workspace == nil)
+        }
         CommandGroup(after: .toolbar) {
             Toggle("Show Code from Tests", isOn: $settings.showsTests)
                 .keyboardShortcut("t", modifiers: [.command, .shift])
@@ -143,8 +153,6 @@ struct ViewCommands: Commands {
                     .keyboardShortcut("2", modifiers: [.command, .control])
             }
             .pickerStyle(.inline)
-            Toggle("Dock Navigator in Workspace", isOn: $settings.docksNavigator)
-                .keyboardShortcut("0", modifiers: .command)
             Divider()
         }
     }
@@ -174,26 +182,12 @@ struct WindowAccessor: NSViewRepresentable {
     }
 }
 
-/// The initial frames: the Navigator takes the left quarter of the screen
-/// and Workspaces the remaining three quarters, or all of it when the
-/// Navigator is docked in them.
+/// The initial frame of a Workspace window: the screen's visible area,
+/// stepped down and in for later ones.
 enum WindowLayout {
-    static let navigatorShare: CGFloat = 0.25
-
-    static func navigatorFrame(on screen: NSScreen?) -> NSRect? {
+    static func workspaceFrame(on screen: NSScreen?, cascade: Int) -> NSRect? {
         guard let visible = (screen ?? NSScreen.main)?.visibleFrame else { return nil }
         var frame = visible
-        frame.size.width = (visible.width * navigatorShare).rounded()
-        return frame
-    }
-
-    /// With the Navigator `docked` in Workspaces they take the whole width.
-    static func workspaceFrame(on screen: NSScreen?, cascade: Int, docked: Bool = false) -> NSRect? {
-        guard let visible = (screen ?? NSScreen.main)?.visibleFrame else { return nil }
-        let navigatorWidth = docked ? 0 : (visible.width * navigatorShare).rounded()
-        var frame = visible
-        frame.origin.x += navigatorWidth
-        frame.size.width -= navigatorWidth
         // Later Workspaces step down and in so earlier ones stay visible.
         let offset = CGFloat(cascade % 8) * 24
         frame.origin.x += offset

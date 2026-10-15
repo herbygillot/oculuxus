@@ -14,6 +14,8 @@ import XCTest
 /// also renders the ⌘K panel for the query. OCULUXUS_SNAPSHOT_LAYOUT=flat
 /// (or tree) picks the Navigator layout. OCULUXUS_SNAPSHOT_DOCS=none, full
 /// or firstSentence picks how much of each doc comment is shown.
+/// OCULUXUS_SNAPSHOT_SIDEBAR=collapsed or peek renders the Navigator
+/// sidebar collapsed, or collapsed and peeking.
 @MainActor
 final class SnapshotTests: XCTestCase {
     func testRenderProject() async throws {
@@ -35,11 +37,18 @@ final class SnapshotTests: XCTestCase {
         workspace.go(to: WorkspaceLocation(packageID: packageID, declarationID: env["OCULUXUS_SNAPSHOT_DECL"]))
         workspace.showsWholeFile = env["OCULUXUS_SNAPSHOT_FILE"] != nil
 
-        let root = HStack(spacing: 0) {
-            NavigatorView().frame(width: 320)
-            Divider()
+        let sidebarMode = env["OCULUXUS_SNAPSHOT_SIDEBAR"]
+        // Pinned unless asked otherwise, whatever an earlier run saved.
+        if workspace.sidebar.isCollapsed != (sidebarMode != nil) { workspace.sidebar.toggle() }
+        workspace.sidebar.showDelay = .zero
+        if sidebarMode == "peek" {
+            workspace.sidebar.hoverButton(true)
+            for _ in 0..<20 where !workspace.sidebar.isPeeking { try await Task.sleep(for: .milliseconds(10)) }
+        }
+        let root = NavigatorSidebarLayout(sidebar: workspace.sidebar, window: nil) {
             WorkspaceView(workspace: workspace)
         }
+        .environment(\.navigatorWorkspace, workspace)
         .environment(state)
         let view = NSHostingView(rootView: root)
         view.frame = NSRect(x: 0, y: 0, width: 1500, height: 900)

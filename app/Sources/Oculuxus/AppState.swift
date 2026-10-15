@@ -32,6 +32,8 @@ final class WorkspaceModel: Identifiable {
     var isClosed = false
     /// How the panes share the width.
     var split = WorkspaceSplitLayout()
+    /// The Navigator sidebar: pinned or collapsed, its width, and its peek.
+    let sidebar: NavigatorSidebar
     /// The references and call hierarchy panel at the bottom, once opened.
     var references: ReferencesModel?
     /// The identifier at the source viewer's insertion point, when the
@@ -52,8 +54,9 @@ final class WorkspaceModel: Identifiable {
     @ObservationIgnored private var clicks = 0
     @ObservationIgnored private var pending: PendingClick?
 
-    init(id: UUID, split: Double? = nil) {
+    init(id: UUID, split: Double? = nil, sidebar: SidebarState = SidebarState()) {
         self.id = id
+        self.sidebar = NavigatorSidebar(sidebar)
         self.split.manualShare = split
     }
 
@@ -191,7 +194,7 @@ final class WorkspaceModel: Identifiable {
 @Observable
 @MainActor
 final class AppState {
-    let settings = AppSettings()
+    let settings: AppSettings
     /// The open project, if any.
     private(set) var session: ProjectSession?
 
@@ -201,13 +204,20 @@ final class AppState {
     @ObservationIgnored private var closedWorkspaceIDs: Set<UUID> = []
     /// The Workspace that was most recently key.
     private(set) var lastActiveWorkspaceID: UUID?
-    weak var navigatorWindow: NSWindow?
+    /// Whether the project from the command line, or the last one, was
+    /// opened at launch.
+    @ObservationIgnored private var openedLaunchProject = false
 
-    init() {}
+    init(settings: AppSettings? = nil) {
+        self.settings = settings ?? AppSettings()
+    }
 
+    /// A new Workspace takes the last active one's sidebar state, or the
+    /// one saved last.
     func workspace(_ id: UUID) -> WorkspaceModel {
         if let model = workspaces[id] { return model }
-        let model = WorkspaceModel(id: id, split: settings.workspaceSplit)
+        let model = WorkspaceModel(id: id, split: settings.workspaceSplit, sidebar: activeWorkspace?.sidebar.savedState ?? settings.navigatorSidebar)
+        model.sidebar.onChange = { [weak settings] in settings?.navigatorSidebar = $0 }
         if closedWorkspaceIDs.contains(id) {
             model.isClosed = true
         } else {
@@ -219,6 +229,8 @@ final class AppState {
     func workspaceBecameActive(_ id: UUID) {
         guard !closedWorkspaceIDs.contains(id) else { return }
         lastActiveWorkspaceID = id
+        // The active Workspace's sidebar is the default for the next launch.
+        if let model = workspaces[id] { settings.navigatorSidebar = model.sidebar.savedState }
     }
 
     func workspaceClosed(_ id: UUID) {
@@ -230,32 +242,6 @@ final class AppState {
         workspaces[id] = nil
         if lastActiveWorkspaceID == id {
             lastActiveWorkspaceID = workspaces.values.first { !$0.isClosed && $0.window != nil }?.id
-        }
-    }
-
-    // MARK: Docked Navigator
-
-    /// Whether the Workspace shows the Navigator as a sidebar: in full
-    /// screen, or always with the Dock Navigator setting.
-    func docksNavigator(in workspace: WorkspaceModel) -> Bool {
-        workspace.isFullScreen || settings.docksNavigator
-    }
-
-    /// Whether a Workspace window on screen has the Navigator docked, so
-    /// the Navigator window should be hidden.
-    var navigatorIsDocked: Bool {
-        workspaces.values.contains { !$0.isClosed && $0.window != nil && docksNavigator(in: $0) }
-    }
-
-    /// Hides the Navigator window while it is docked in a Workspace, and
-    /// shows it (opening it again if it was closed) when it is not.
-    func updateNavigatorWindow(openWindow: OpenWindowAction?) {
-        if navigatorIsDocked {
-            navigatorWindow?.orderOut(nil)
-        } else if let navigatorWindow {
-            if !navigatorWindow.isVisible { navigatorWindow.orderFront(nil) }
-        } else {
-            openWindow?(id: WindowID.navigator)
         }
     }
 
@@ -284,7 +270,12 @@ final class AppState {
     /// packages are listed, the active Workspace (or a new one) shows the
     /// first project package.
     func openProject(_ rootDir: String, openWindow: OpenWindowAction?) async {
-        if session?.rootDir == rootDir, session?.status == .ready { return }
+        if let session, session.rootDir == rootDir, session.status == .ready {
+            // Already open: show it again if every Workspace was closed.
+            settings.addRecentProject(rootDir)
+            await showFirstPackage(of: session, openWindow: openWindow)
+            return
+        }
         session?.close()
         searchPanel?.close()
         searchModel = nil
@@ -375,6 +366,16 @@ final class AppState {
             .map { URL(fileURLWithPath: $0).standardizedFileURL.path }
     }
 
+    /// Opens the folder given on the command line, or the last project,
+    /// when the first Workspace appears.
+    func openLaunchProject(openWindow: OpenWindowAction?) {
+        guard !openedLaunchProject else { return }
+        openedLaunchProject = true
+        guard session == nil, let dir = Self.launchProject ?? settings.recentProjects.first,
+              FileManager.default.fileExists(atPath: dir) else { return }
+        Task { await openProject(dir, openWindow: openWindow) }
+    }
+
     /// Asks for a project folder and opens it.
     func chooseProject(openWindow: OpenWindowAction) {
         guard let dir = ProjectPanel.choose() else { return }
@@ -383,7 +384,6 @@ final class AppState {
 }
 
 enum WindowID {
-    static let navigator = "navigator"
     static let workspace = "workspace"
 }
 

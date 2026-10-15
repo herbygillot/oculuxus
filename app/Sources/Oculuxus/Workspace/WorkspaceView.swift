@@ -1,9 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// A Workspace window. Tracks which Workspace was last active, and docks
-/// the Navigator as a sidebar while the window is full screen or when the
-/// Dock Navigator setting is on.
+/// A Workspace window: the Navigator as a leading sidebar, pinned or
+/// collapsed, and the Workspace. Tracks which Workspace was last active.
 struct WorkspaceWindow: View {
     @Environment(AppState.self) private var state
     @Environment(\.openWindow) private var openWindow
@@ -21,17 +20,10 @@ struct WorkspaceWindow: View {
 
     var body: some View {
         let workspace = workspace
-        Group {
-            if state.docksNavigator(in: workspace) {
-                HSplitView {
-                    NavigatorView()
-                        .frame(minWidth: 200, idealWidth: 280, maxWidth: 480)
-                    WorkspaceView(workspace: workspace)
-                }
-            } else {
-                WorkspaceView(workspace: workspace)
-            }
+        NavigatorSidebarLayout(sidebar: workspace.sidebar, window: workspace.window) {
+            WorkspaceView(workspace: workspace)
         }
+        .environment(\.navigatorWorkspace, workspace)
         .frame(minWidth: 600, minHeight: 400)
         .focusedSceneValue(\.workspace, workspace)
         .background(WindowAccessor { window in
@@ -44,19 +36,15 @@ struct WorkspaceWindow: View {
                 MainActor.assumeIsolated {
                     workspace.isFullScreen = false
                     state.workspaceClosed(workspace.id)
-                    state.updateNavigatorWindow(openWindow: openWindow)
                 }
                 if let observer { NotificationCenter.default.removeObserver(observer) }
             }
             let cascade = max(state.workspaces.count - 1, 0)
-            if let frame = WindowLayout.workspaceFrame(on: window.screen, cascade: cascade, docked: state.settings.docksNavigator) {
+            if let frame = WindowLayout.workspaceFrame(on: window.screen, cascade: cascade) {
                 window.setFrame(frame, display: true)
             }
-            state.updateNavigatorWindow(openWindow: openWindow)
+            state.openLaunchProject(openWindow: openWindow)
         })
-        .onChange(of: state.settings.docksNavigator) {
-            state.updateNavigatorWindow(openWindow: openWindow)
-        }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
             if isOwnWindow(note) { state.workspaceBecameActive(workspace.id) }
         }
@@ -75,7 +63,7 @@ struct WorkspaceWindow: View {
 
     private func setFullScreen(_ fullScreen: Bool) {
         workspace.isFullScreen = fullScreen
-        state.updateNavigatorWindow(openWindow: openWindow)
+        workspace.sidebar.fullScreenChanged(fullScreen)
     }
 }
 
@@ -104,6 +92,7 @@ struct WorkspaceView: View {
         .navigationSubtitle(subtitle)
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
+                SidebarToggle(sidebar: workspace.sidebar)
                 Button { workspace.goBack() } label: { Image(systemName: "chevron.left") }
                     .disabled(!workspace.canGoBack)
                     .help("Back")

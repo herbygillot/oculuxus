@@ -92,9 +92,9 @@ final class AppSettings {
     var customEditorCommand: String { didSet { save() } }
     /// What Automatic resolves to, once known: nil for the default app.
     private(set) var automaticEditor: EditorChoice??
-    /// Workspaces show the Navigator as a sidebar, not only in full screen,
-    /// and the Navigator window stays hidden while one is open.
-    var docksNavigator: Bool { didSet { save() } }
+    /// The Navigator sidebar state new Workspaces start with at launch:
+    /// the last one the user set.
+    var navigatorSidebar: SidebarState { didSet { if navigatorSidebar != oldValue { save() } } }
     /// The outline's share of a new Workspace's width, from the last time
     /// the user dragged the divider; nil to widen the pane clicked.
     var workspaceSplit: Double? { didSet { save() } }
@@ -104,8 +104,10 @@ final class AppSettings {
     /// Recently opened project folders, most recent first.
     private(set) var recentProjects: [String] { didSet { save() } }
 
-    init() {
-        let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         fontFamily = defaults.string(forKey: "fontFamily") ?? "System Monospaced"
         let size = defaults.double(forKey: "fontSize")
         fontSize = size > 0 ? size : 13
@@ -118,7 +120,7 @@ final class AppSettings {
         navigatorLayout = defaults.string(forKey: "navigatorLayout").flatMap(NavigatorLayout.init(rawValue:)) ?? .tree
         editor = defaults.string(forKey: "editor").flatMap(EditorChoice.init(rawValue:)) ?? .automatic
         customEditorCommand = defaults.string(forKey: "customEditorCommand") ?? ""
-        docksNavigator = defaults.bool(forKey: "docksNavigator")
+        navigatorSidebar = defaults.data(forKey: "navigatorSidebar").flatMap { try? JSONDecoder().decode(SidebarState.self, from: $0) } ?? SidebarState()
         buildTargets = defaults.data(forKey: "buildTargets").flatMap { try? JSONDecoder().decode([String: BuildTarget].self, from: $0) } ?? [:]
         workspaceSplit = defaults.object(forKey: "workspaceSplit") as? Double
         Task { [weak self] in
@@ -156,7 +158,6 @@ final class AppSettings {
     }
 
     private func save() {
-        let defaults = UserDefaults.standard
         defaults.set(fontFamily, forKey: "fontFamily")
         defaults.set(fontSize, forKey: "fontSize")
         defaults.set(themeID, forKey: "theme")
@@ -168,7 +169,7 @@ final class AppSettings {
         defaults.set(navigatorLayout.rawValue, forKey: "navigatorLayout")
         defaults.set(editor.rawValue, forKey: "editor")
         defaults.set(customEditorCommand, forKey: "customEditorCommand")
-        defaults.set(docksNavigator, forKey: "docksNavigator")
+        defaults.set(try? JSONEncoder().encode(navigatorSidebar), forKey: "navigatorSidebar")
         defaults.set(workspaceSplit, forKey: "workspaceSplit")
         defaults.set(try? JSONEncoder().encode(buildTargets), forKey: "buildTargets")
     }
@@ -213,8 +214,6 @@ struct SettingsPopover: View {
                     }
                 }
             }
-            Toggle("Dock Navigator in Workspace", isOn: $settings.docksNavigator)
-                .help("Show the Navigator as a sidebar in each Workspace instead of in its own window (⌘0)")
             Picker("Editor", selection: $settings.editor) {
                 ForEach(EditorChoice.allCases) { choice in
                     Text(choice == .automatic ? automaticName : choice.name).tag(choice)
