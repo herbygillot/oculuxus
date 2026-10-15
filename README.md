@@ -46,3 +46,7 @@ make generate
 The generated Go code is committed under `helper/pb/`. The Swift types are
 generated at build time by the swift-protobuf SwiftPM plugin and are not
 committed.
+
+## License
+
+Oculuxus is released under the [MIT License](LICENSE).
