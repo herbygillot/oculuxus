@@ -164,6 +164,12 @@ final class NavigatorSidebar {
         }
     }
 
+    /// Waits for the pending show or hide timer, if any, to fire or be
+    /// cancelled. For tests, so they need not guess at timing.
+    func awaitTimer() async {
+        await timer?.value
+    }
+
     private func cancelTimer() {
         timer?.cancel()
         timer = nil
