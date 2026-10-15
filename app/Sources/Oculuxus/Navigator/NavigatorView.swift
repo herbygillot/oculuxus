@@ -1,30 +1,6 @@
 import SwiftUI
 
-/// The Navigator window. It hides itself while a Workspace is full screen,
-/// because the Navigator is docked in that Workspace then.
-struct NavigatorWindow: View {
-    @Environment(AppState.self) private var state
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some View {
-        NavigatorView()
-            .frame(minWidth: 220, minHeight: 300)
-            .background(WindowAccessor { window in
-                state.navigatorWindow = window
-                if let frame = WindowLayout.navigatorFrame(on: window.screen) {
-                    window.setFrame(frame, display: true)
-                }
-                // Open the folder given on the command line, or reopen the
-                // last project.
-                if state.session == nil, let dir = AppState.launchProject ?? state.settings.recentProjects.first,
-                   FileManager.default.fileExists(atPath: dir) {
-                    Task { await state.openProject(dir, openWindow: openWindow) }
-                }
-            })
-    }
-}
-
-/// The project picker and the package list.
+/// The project picker and the package list, in a Workspace's sidebar.
 struct NavigatorView: View {
     @Environment(AppState.self) private var state
     @Environment(\.openWindow) private var openWindow
@@ -250,6 +226,9 @@ private struct PackageList: View {
     /// the project, collapsed elsewhere.
     @State private var toggledNodes: Set<String> = []
     @State private var selectedPackageID: String?
+    /// The Workspace this Navigator is the sidebar of.
+    @Environment(\.navigatorWorkspace) private var host
+    @Environment(\.navigatorPicked) private var picked
 
     var body: some View {
         let layout = state.settings.navigatorLayout
@@ -276,20 +255,15 @@ private struct PackageList: View {
         .listStyle(.sidebar)
         .contextMenu(forSelectionType: String.self) { _ in
         } primaryAction: { ids in
-            // Double-click or Return: show the package, opening a
-            // Workspace if none is open.
+            // Double-click or Return: show the package.
             guard let id = ids.first else { return }
             show(id, newWindow: ClickModifiers.opensNewWorkspace)
         }
         .onChange(of: selectedPackageID) { _, id in
-            // A single click follows along in the open Workspace; with no
-            // Workspace open it only selects, and double-click opens one.
+            // A click shows the package in this Workspace; ⌘-click opens
+            // a new one.
             guard let id, id != activePackageID else { return }
-            if ClickModifiers.opensNewWorkspace {
-                show(id, newWindow: true)
-            } else if state.activeWorkspace != nil {
-                show(id, newWindow: false)
-            }
+            show(id, newWindow: ClickModifiers.opensNewWorkspace)
         }
         .onChange(of: activePackageID, initial: true) { _, id in
             guard let id else { return }
@@ -303,12 +277,22 @@ private struct PackageList: View {
         }
     }
 
+    private var workspace: WorkspaceModel? {
+        host ?? state.activeWorkspace
+    }
+
     private var activePackageID: String? {
-        state.activeWorkspace?.location?.packageID
+        workspace?.location?.packageID
     }
 
     private func show(_ packageID: String, newWindow: Bool) {
-        state.show(WorkspaceLocation(packageID: packageID), newWindow: newWindow, openWindow: openWindow)
+        let location = WorkspaceLocation(packageID: packageID)
+        if !newWindow, let workspace {
+            workspace.go(to: location)
+        } else {
+            state.show(location, newWindow: newWindow, openWindow: openWindow)
+        }
+        picked?()
     }
 
     /// Expands the groups and folders that contain the package.

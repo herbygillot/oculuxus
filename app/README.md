@@ -5,7 +5,7 @@ so there is no checked-in Xcode project; open `app/Package.swift` in Xcode,
 or build from the command line:
 
 ```sh
-swift build          # or: xcodebuild -scheme Oculuxus -destination platform=macOS build
+swift build          # or: xcodebuild -scheme Oculuxus -destination platform=macOS -skipPackagePluginValidation build
 swift test
 swift run Oculuxus
 ```
@@ -59,10 +59,19 @@ their module, or as a flat list of full import paths. Switch with the control
 next to the project picker or View ▸ Packages as Tree / as List (⌃⌘1, ⌃⌘2);
 the choice is remembered.
 
-The Navigator floats in its own window, and docks as a sidebar in a
-Workspace in full screen. With View ▸ Dock Navigator in Workspace (⌘0, also
-in the Font, Colors, Go and Editor popover) every Workspace shows it as a
-sidebar and the Navigator window stays hidden while a Workspace is open.
+Every Workspace window has the Navigator as its leading sidebar, a quarter
+of the window wide at first; drag its edge to resize it. The sidebar button
+at the leading end of the toolbar (or View ▸ Show/Hide Navigator, ⌃⌘S)
+collapses it so the Workspace takes the whole width, and pins it again.
+While it is collapsed, resting the pointer on the button slides the
+Navigator over the Workspace; it goes away when the pointer leaves it and
+the button, when you pick a package, or with Escape, and clicking the
+button pins it. Clicking a package shows it in that window; ⌘-click opens a
+new Workspace. Each Workspace keeps its own sidebar state and width; a new
+one copies the active Workspace's, and the last one is used at the next
+launch. Full screen pins the sidebar, and the button still works there.
+Closing the last Workspace leaves no window open; File ▸ Open Folder… or
+Open Recent opens a project in a new one.
 
 A Workspace gives three quarters of its width to the package content pane
 at first. Clicking a pane gives it the three quarters, animated; selecting a
@@ -88,9 +97,11 @@ usable Go, the app asks for a Go binary and remembers it (Font, Colors and Go
 popover in a Workspace toolbar).
 
 `swift test` includes tests that drive the real helper; they are skipped when
-`bin/oculuxus-helper` is missing. `SnapshotTests` renders the Navigator and a
-Workspace for a project into a PNG when `OCULUXUS_SNAPSHOT_DIR` is set
-(`OCULUXUS_SNAPSHOT_LAYOUT=flat` renders the flat Navigator).
+`bin/oculuxus-helper` is missing. `SnapshotTests` renders a Workspace with
+its Navigator sidebar for a project into a PNG when `OCULUXUS_SNAPSHOT_DIR`
+is set (`OCULUXUS_SNAPSHOT_LAYOUT=flat` renders the flat Navigator,
+`OCULUXUS_SNAPSHOT_SIDEBAR=collapsed` or `peek` the collapsed or peeking
+sidebar).
 `ReferencesScreenshotTests` puts a Workspace on screen for `helper/`, opens
 the references panel on each tab and a hover card, and captures them with
 `screencapture` into `OCULUXUS_SCREENSHOT_DIR`.
@@ -99,8 +110,8 @@ the references panel on each tab and a hover card, and captures them with
 | --- | --- |
 | `Helper/` | `HelperClient` (process, framing, request ids, progress, cancel, shutdown) and locating the helper and Go. |
 | `Model/` | `ProjectSession`: the open project, its package list, shared, cancellable request caches, and live reload; `ProjectWatcher` (FSEvents). |
-| `Navigator/` | The Navigator window: project picker, project packages, dependencies by module, the standard library, as a tree or a flat list (`PackageTree.swift`). |
-| `Workspace/` | Workspace windows: package content pane, source viewer (TextKit 2 `NSTextView`), history. |
+| `Navigator/` | The Navigator sidebar's content: project picker, project packages, dependencies by module, the standard library, as a tree or a flat list (`PackageTree.swift`). |
+| `Workspace/` | Workspace windows: the Navigator sidebar with its toggle and peek (`NavigatorSidebar.swift`), package content pane, source viewer (TextKit 2 `NSTextView`), history. |
 | `Search/` | The ⌘K panel and its model. |
 | `References/` | The references and call hierarchy panel and its model. |
 | `Hover/` | Hover cards and the presenter that shows and dismisses them. |
