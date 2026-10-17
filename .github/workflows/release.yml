@@ -1,0 +1,56 @@
+name: release
+
+# Pushing a tag like v0.2.0 builds dist/Oculuxus.app (universal, helper
+# inside), zips it and attaches it to a GitHub release for that tag. Run it
+# by hand to build the zip as a workflow artifact without releasing.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # bundle.sh numbers the build by counting commits.
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: helper/go.mod
+      - name: Version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version=${GITHUB_REF_NAME#v}
+            zip=Oculuxus-$version.zip
+          else
+            version=0.0.0
+            zip=Oculuxus-dev-$(git rev-parse --short HEAD).zip
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "ZIP=$zip" >> "$GITHUB_ENV"
+      - name: Bundle
+        run: make app-bundle
+      - name: Zip
+        run: ditto -c -k --keepParent dist/Oculuxus.app "dist/$ZIP"
+      - name: Upload artifact
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP }}
+          path: dist/${{ env.ZIP }}
+      - name: Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "dist/$ZIP" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "dist/$ZIP" \
+              --title "Oculuxus $VERSION" --generate-notes --verify-tag
+          fi

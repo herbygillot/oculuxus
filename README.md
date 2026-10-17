@@ -45,7 +45,13 @@ To build it you also need Xcode and Go 1.26 or later.
 
 ## Building
 
-There are no prebuilt downloads yet. Build the app from source:
+Each tagged version is published as a zipped app on the
+[Releases](https://github.com/herbygillot/oculuxus/releases) page. Those
+builds are signed ad hoc, not notarized, so the first time you open one,
+Control-click Oculuxus.app and choose Open (or allow it in System Settings ▸
+Privacy & Security).
+
+To build the app from source:
 
 ```sh
 git clone https://github.com/herbygillot/oculuxus.git
